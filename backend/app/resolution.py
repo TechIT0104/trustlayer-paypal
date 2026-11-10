@@ -40,6 +40,9 @@ Rules:
 - If the buyer rejects an offer, you may improve it once, still within policy.
 - Money is only an OFFER until the buyer clicks "Accept". Never say a refund was issued, sent or processed;
   say "I can offer..." and tell them they can accept it below.
+- Propose exactly ONE remedy per turn, and it must be the one in "offer". Never list alternatives
+  ("a replacement or a refund"): the buyer can only accept what is in "offer".
+- For a replacement or an escalation, say the seller will confirm next steps; do not mention a money amount.
 
 Return JSON only:
 {"issue_type": one of [late_delivery, damaged, not_as_described, not_received, changed_mind, other],

@@ -42,19 +42,31 @@ def approve(page, url: str, tag: str) -> None:
     page.goto(url)
     page.wait_for_load_state("domcontentloaded")
     t0 = time.time()
-    while time.time() - t0 < 90:
-        if page.locator("#email").is_visible():
-            page.fill("#email", BUYER)
+    def tap(selector_or_locator) -> None:
+        # PayPal shows a transitional spinner overlay; never block on it, just try again next loop
+        try:
+            if isinstance(selector_or_locator, str):
+                page.click(selector_or_locator, timeout=4000)
+            else:
+                selector_or_locator.click(timeout=4000)
+        except Exception:
+            pass
+
+    while time.time() - t0 < 120:
+        if page.locator("#email").is_visible() and not page.locator("#password").is_visible():
+            if page.input_value("#email") != BUYER:
+                page.fill("#email", BUYER)
             if page.locator("#btnNext").is_visible():
-                page.click("#btnNext")
+                tap("#btnNext")
+                page.wait_for_timeout(2500)
         if page.locator("#password").is_visible():
             page.fill("#password", PWD)
-            page.click("#btnLogin")
+            tap("#btnLogin")
             page.wait_for_timeout(4000)
         for label in ("Continue", "Continue to Review Order", "Pay Now", "Complete Purchase", "Agree & Continue", "Agree and Continue"):
             btn = page.get_by_role("button", name=label, exact=True)
             if btn.count() and btn.first.is_visible():
-                btn.first.click()
+                tap(btn.first)
                 page.wait_for_timeout(3500)
                 break
         if "example.com" in page.url:

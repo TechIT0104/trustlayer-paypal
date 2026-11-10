@@ -1,4 +1,4 @@
-# 🛡️ TrustLayer — a trust layer for both sides of a PayPal payment
+# TrustLayer — a trust layer for both sides of a PayPal payment
 
 **Pay-pause scam interception · pre-dispute resolution · seller account health**, built on PayPal's
 Orders v2, Payments v2 and Payouts APIs with an AI layer whose every money decision is bounded by code.
@@ -22,7 +22,7 @@ an unhappy buyer files a dispute, and **before** a seller's metrics trigger a ho
 
 ## What it does
 
-### 1. ⏸ Pay-pause: scam interception before money moves
+### 1. Pay-pause: scam interception before money moves
 Every checkout is a PayPal **authorization** (`intent: AUTHORIZE`). The money is held, not taken. Before the buyer
 even sees the PayPal button, TrustLayer reads the listing and the buyer–seller chat:
 
@@ -39,7 +39,7 @@ screen that names the tactic in plain words, highlights the exact chat lines, an
 big button. If the buyer still insists, the authorization goes into a **cooling-off hold** and a **trusted contact**
 gets a link to double-check. Either can **void** the hold, so the buyer is never charged.
 
-### 2. 🤝 Pre-dispute resolution agent
+### 2. Pre-dispute resolution agent
 After purchase, an unhappy buyer talks to an AI assistant acting for the seller, *before* anyone opens a PayPal
 dispute. The LLM classifies the issue (late, damaged, not as described…), gauges dispute risk and proposes an outcome.
 **Code enforces the seller's policy**: refund caps, when a full refund is allowed, no refunds for change of mind.
@@ -47,7 +47,11 @@ The model can't promise money the seller didn't authorize. One click executes it
 - order still on hold → **capture the reduced amount** (the rest of the hold is released; nothing to refund, no fee on it)
 - already captured → **partial refund** via the Refunds API
 
-### 3. 📈 Seller account health
+Anything outside the assistant's authority (a full refund on a delivered item, a severe defect) is **escalated to
+the seller's inbox**, where the seller sends a refund of their choosing or declines. Every path ends in a PayPal call
+or an explicit human decision, never a dead end.
+
+### 3. Seller account health
 A dashboard of the public signals that commonly trigger holds and reviews: dispute ratio vs the **1.5%** line,
 refund rate, volume spikes vs the seller's own baseline, new-account velocity, scam pauses on their listings,
 and Seller Protection coverage from real PayPal capture data. It shows **"dispute rate without TrustLayer's
@@ -73,8 +77,16 @@ IDs it produced (order, authorization, capture, refund, payout batch). Edit any 
                                           POST /v1/payments/payouts  → seller paid (minus platform fee)
 ```
 
-Every state-changing call sends a `PayPal-Request-Id` derived from our order and action IDs, so retries and double
-clicks can never double-charge or double-pay. Payout batch IDs are tied to order IDs for the same reason.
+Production details that are handled, not hand-waved:
+- **Idempotency:** every state-changing call sends a `PayPal-Request-Id` derived from our order and action IDs, so retries
+  and double clicks can never double-charge or double-pay. Payout batch IDs are tied to order IDs for the same reason.
+- **Webhooks:** `POST /api/webhooks/paypal` verifies each event with PayPal's `verify-webhook-signature` API, drops
+  duplicates (PayPal retries), and reconciles authorization voids, captures, refunds and payout item outcomes
+  (`SUCCEEDED / UNCLAIMED / FAILED / RETURNED`). `scripts/register_webhook.py` registers it after deploy.
+- **Payout reconciliation:** payout status is polled until PayPal reports a final state, even without webhooks.
+- **Declined funding:** `INSTRUMENT_DECLINED` on authorize returns a restart signal, and the JS SDK calls `actions.restart()`.
+- **Expired holds:** past PayPal's 3-day honor period, a capture that fails with `AUTHORIZATION_EXPIRED` is
+  reauthorized and retried automatically.
 
 ## Evaluation (honest numbers)
 
@@ -87,8 +99,9 @@ _Run `python eval/run_eval.py`; results land in `eval/results/summary.json` and 
 | PayPal capability | Where |
 |---|---|
 | **Orders v2**: create with `intent: AUTHORIZE`, authorize | every checkout ([backend/app/paypal.py](backend/app/paypal.py)) |
-| **Payments v2**: capture (full / partial-final), void, refund | release, scam cancel, resolution settlements |
-| **Payouts v1** | pay the seller after delivery, minus platform fee |
+| **Payments v2**: capture (full / partial-final), void, refund, reauthorize | release, scam cancel, resolution settlements, expired holds |
+| **Payouts v1**: create batch, get status | pay the seller after delivery, minus platform fee; reconcile the outcome |
+| **Webhooks**: register, verify signature, consume events | [backend/app/webhooks.py](backend/app/webhooks.py) |
 | **PayPal JS SDK** buttons (`intent=authorize`) | buyer approval in the browser, plus a redirect fallback |
 | Seller Protection status from authorizations and captures | seller health dashboard |
 | **PayPal AI Toolkit** (Claude Code plugin + sandbox MCP server) | used during development to inspect orders and test sandbox flows |
@@ -125,11 +138,18 @@ Open **http://127.0.0.1:8000**. Demo data seeds itself on first start, and **Led
 
 ### Tests
 ```bash
+pip install -r backend/requirements-dev.txt
+python -m pytest tests            # 43 offline tests: ledger, scam rules + grounding + fusion, refund policy,
+                                  # every order path, webhooks, reauthorization, declined funding (fake PayPal + fake LLM)
 python scripts/e2e_paypal.py      # real sandbox: approve → hold → AI settlement → capture → payout; and scam → pause → void
 python scripts/ui_smoke.py        # headless: every page renders, no console errors, mobile layout
-python eval/run_eval.py           # Pay-pause precision / recall / false-pause rate on the labelled set
+python eval/run_eval.py && python eval/report.py   # Pay-pause precision / recall / false-pause rate → NUMBERS.md
 ```
 (The two browser scripts need `pip install playwright && playwright install chromium`.)
+
+### Deploy (Render, free)
+`render.yaml` is a ready Blueprint: New → Blueprint → this repo → fill the secret env vars. After the first deploy, run
+`python scripts/register_webhook.py https://<your-app>.onrender.com` and set the printed `PAYPAL_WEBHOOK_ID`.
 
 ## Demo script (3 acts, under 3 minutes)
 1. **The scam**: open the *iPhone 15 Pro* listing → **Continue to pay** → Pay-pause flags Friends & Family + "no G&S" and highlights the exact chat lines → **Don't pay**. Or insist, add a trusted contact, approve in PayPal, and watch the **cooling-off countdown**; the contact clicks **"This looks like a scam"** and the **hold is voided**.
@@ -141,6 +161,8 @@ python eval/run_eval.py           # Pay-pause precision / recall / false-pause r
 - The evaluation set is LLM-generated (by a different model) and labelled by scenario. It measures behaviour on realistic patterns, not real-world prevalence.
 - The seller-health dashboard uses public signals, not PayPal's internal models; demo history is synthetic and seeded.
 - The trusted-contact link is shown in-app; a production version would send it by SMS or email.
+- There is no login: one demo buyer, and the seller inbox is reachable from the seller-health page. Demo-only endpoints
+  (reset, tamper simulation) are disabled with `DEMO_MODE=false`.
 
 ## Research and sources that shaped the design
 - *Counter-Scam: LLM chain-of-response system* (arXiv 2606.01475): LLMs confuse scam types, which motivates tactic naming plus grounded evidence.

@@ -76,7 +76,7 @@ def _parse(text: str) -> dict:
 
 
 def generate(instruction: str, n: int) -> tuple[list, dict]:
-    body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 2800, "reasoning_effort": "none",
+    body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 1900, "reasoning_effort": "none",
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": SYSTEM},
                          {"role": "user", "content": TEMPLATE.format(n=n, instruction=instruction)}]}

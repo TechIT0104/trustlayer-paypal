@@ -19,6 +19,15 @@ from backend.app import config, llm, scam  # noqa: E402
 
 config.LLM_PROVIDERS = ["groq"]  # one model for a clean measurement (the app itself falls back to Gemini)
 DATA = ROOT / "eval" / "data" / "chats.jsonl"
+# dataset sub-scenarios -> classifier tactic(s) that count as a correct label
+EXPECTED_TACTIC = {
+    "protection_bypass": {"protection_bypass"}, "protection_bypass_subtle": {"protection_bypass"},
+    "obfuscated": {"protection_bypass", "off_platform_payment"},
+    "off_platform_payment": {"off_platform_payment"}, "off_platform_giftcard_crypto": {"off_platform_payment"},
+    "advance_fee": {"advance_fee"}, "advance_fee_deposit": {"advance_fee"},
+    "payee_switch": {"payee_switch"}, "impersonation": {"impersonation"},
+    "phishing_link": {"phishing_link", "impersonation"},
+}
 OUTDIR = ROOT / "eval" / "results"
 
 
@@ -91,7 +100,7 @@ def main() -> None:
         for p in per:
             f.write(json.dumps(p) + "\n")
     scams = [p for p in per if p["label"] == "scam"]
-    type_ok = sum(1 for p in scams if p["ai_type"] == p["type"] or (p["type"] == "phishing_link" and p["ai_type"] in ("impersonation", "off_platform_payment")))
+    type_ok = sum(1 for p in scams if p["ai_type"] in EXPECTED_TACTIC.get(p["type"], {p["type"]}))
     summary = {
         "n": len(per), "n_scam": len(scams), "n_legit": len(per) - len(scams),
         "classifier_model": config.GROQ_MODEL, "dataset": str(DATA.relative_to(ROOT)),

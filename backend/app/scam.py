@@ -24,6 +24,7 @@ SCAM_TYPES = [
     "overpayment",            # pay extra / refund the difference
     "payee_switch",           # pay my cousin's account / this other email
     "impersonation",          # fake PayPal support, "account limited, pay to unlock"
+    "phishing_link",          # seller's own "payment link" to a look-alike site
     "too_good_to_be_true",    # price far below market + pressure
     "none",
 ]
@@ -44,6 +45,10 @@ RULES = [
      0.45, True, "Wants payment sent to a different account than the seller's"),
     ("impersonation", r"paypal (?:support|team|agent|security|department)|account (?:is |was |has been )?(?:limited|suspended|locked|on hold)|verify your (?:account|paypal)|unlock (?:the|your) (?:funds|payment)",
      0.5, True, "Claims to be PayPal / says an account is 'limited' and needs payment"),
+    ("lookalike_link", r"(?:https?://|www\.)\S*(?:paypa[1il]|pay-?pal-|pp-|secure-?pay|verify|checkout-|invoice-)\S*|\b[\w-]*paypa1[\w.-]*",
+     0.5, True, "Sends a payment link to a look-alike website instead of the checkout"),
+    ("external_link", r"https?://\S+|\bwww\.\S+",
+     0.15, False, "Shares an outside link"),
     ("contact_switch", r"whats\s?app|telegram|signal app|text me|email me (?:at|on)|my (?:number|cell)|call me (?:at|on)|\+?\d[\d\s\-]{8,}\d|[\w.+-]+@[\w-]+\.[\w.]+",
      0.2, False, "Moves the conversation off the platform"),
     ("urgency", r"right now|asap|hurry|today only|first come|others? (?:are |is )?(?:waiting|interested|asking)|someone else (?:wants|is)|last chance|before (?:someone|anyone) else|within (?:\d+|an?|the next) (?:min|minute|hour)|(?:won'?t|will not) hold|no holds",

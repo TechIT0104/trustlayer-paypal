@@ -34,6 +34,13 @@ def test_obfuscated_and_off_platform_variants():
     assert {"friends_family", "off_platform"} <= keys(sig)
 
 
+def test_lookalike_payment_link_is_strong_but_ordinary_links_are_weak():
+    bad = {s["key"]: s for s in scam.rule_signals(FAIR, OLD_SELLER, chat(("seller", "pay at https://paypa1-secure-checkout.com/x")))}
+    ok = {s["key"]: s for s in scam.rule_signals(FAIR, OLD_SELLER, chat(("seller", "more photos: https://imgur.com/a/1")))}
+    assert bad["lookalike_link"]["strong"]
+    assert "lookalike_link" not in ok and not ok["external_link"]["strong"]
+
+
 def test_price_anomaly_and_new_seller_are_weak_signals():
     sig = {s["key"]: s for s in scam.rule_signals(LISTING, NEW_SELLER, chat(("seller", "hello")))}
     assert not sig["price_anomaly"]["strong"] and not sig["new_seller"]["strong"]

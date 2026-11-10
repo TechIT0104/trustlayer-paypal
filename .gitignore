@@ -11,3 +11,4 @@ dist/
 backend/trustlayer.db
 scripts/.spike_order
 eval/results/*.raw.jsonl
+scripts/e2e_shots/

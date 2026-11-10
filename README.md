@@ -5,6 +5,10 @@ Orders v2, Payments v2 and Payouts APIs with an AI layer whose every money decis
 
 > Built for the **PayPal AI Hackathon** (Nov 2026). Runs entirely on the free PayPal **sandbox**.
 
+**Live demo: https://trustlayer-e5mz.onrender.com**. It's on Render's free tier, so the first load after idle can take
+about 50 seconds. To approve payments, use a PayPal **sandbox personal** account (create one free at
+developer.paypal.com → Sandbox → Accounts). **Audit log → Reset demo** restores the starting data.
+
 ---
 
 ## The problem

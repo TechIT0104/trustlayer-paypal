@@ -27,3 +27,7 @@ services:
         sync: false
       - key: SANDBOX_BUYER2_EMAIL
         sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PLUS_PLAN_ID
+        sync: false

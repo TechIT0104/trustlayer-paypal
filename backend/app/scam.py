@@ -15,7 +15,7 @@ PAUSE requires corroboration: a strong rule signal, or LLM risk backed by ground
 import re
 import time
 
-from . import llm
+from . import llm, localmodel
 
 SCAM_TYPES = [
     "protection_bypass",      # Friends & Family / "no G&S" / gift payment to a stranger
@@ -160,6 +160,8 @@ def llm_assess(listing: dict, seller: dict, messages: list[dict]) -> dict:
 
 PAUSE_AT = 0.65
 CAUTION_AT = 0.35
+MODEL_CONFIDENT = 0.9   # local-model probability treated as "confident" (set on the dev set, not the test set)
+MODEL_ONLY_WEIGHT = 0.8  # without the LLM, the model's probability is discounted: it cannot cite evidence
 
 
 def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused") -> dict:
@@ -176,26 +178,41 @@ def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused
         except llm.LLMUnavailable as e:
             ai_error = str(e)
 
-    if mode == "rules" or ai is None:
-        score = rule_score
-        corroborated = strong
+    local = localmodel.predict(listing, seller, messages) if mode in ("fused", "fused_no_llm", "model") else None
+    m = local["p_scam"] if local else None
+    m_thr = local["threshold"] if local else 0.5
+
+    if mode == "model":
+        score = m if m is not None else 0.0
+        corroborated = m is not None and m >= m_thr  # eval-only mode: the model judged on its own
+    elif mode == "rules" or ai is None:
+        # Rules (+ the local model when available). This is also the production path when every LLM is down.
+        score, corroborated = rule_score, strong
+        if m is not None:
+            score = max(rule_score, m * MODEL_ONLY_WEIGHT)
+            # the model cannot cite evidence, so without the LLM it needs at least one rule signal to pause
+            corroborated = strong or (m >= max(m_thr, MODEL_CONFIDENT) and rule_score > 0)
     else:
         llm_risk = ai["risk"]
         if not ai["evidence"] and llm_risk > 0.6:
-            llm_risk = 0.6  # no grounded quote => the model may not go above "caution" on its own
+            llm_risk = 0.6  # no grounded quote => the LLM may not go above "caution" on its own
         grounded = len(ai["evidence"]) >= 1
         if mode == "llm":
             score, corroborated = llm_risk, grounded
         else:
-            # Either independent layer can carry the decision when it is backed by evidence:
-            # a strong rule hit, or an LLM judgement with at least one verified quote from the chat.
-            # Ungrounded LLM opinions only blend in (and were already capped at 0.6 above).
+            # Either evidence-backed layer can carry the decision: a strong rule hit, or an LLM judgement
+            # with at least one verified quote. Ungrounded opinions (LLM capped at 0.6, local model) only blend.
             if strong or grounded:
                 score = max(llm_risk, rule_score)
+            elif m is not None:
+                score = 0.5 * llm_risk + 0.3 * m + 0.2 * rule_score
             else:
                 score = 0.65 * llm_risk + 0.35 * rule_score
-            if strong and llm_risk >= 0.5:  # agreement bonus: both layers point the same way
+            # agreement bonus: independent layers pointing the same way
+            if strong and llm_risk >= 0.5:
                 score = min(1.0, score + 0.1)
+            if m is not None and m >= MODEL_CONFIDENT and llm_risk >= 0.5 and (strong or grounded):
+                score = min(1.0, score + 0.05)
             corroborated = strong or grounded
 
     if score >= PAUSE_AT and corroborated:
@@ -208,7 +225,7 @@ def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused
     reasons = [h["label"] for h in sorted(rules, key=lambda h: -h["weight"])]
     return {
         "verdict": verdict, "score": round(score, 3), "rule_score": round(rule_score, 3),
-        "signals": rules, "reasons": reasons, "ai": ai, "ai_error": ai_error, "mode": mode,
+        "signals": rules, "reasons": reasons, "ai": ai, "ai_error": ai_error, "mode": mode, "local_model": local,
         "thresholds": {"pause": PAUSE_AT, "caution": CAUTION_AT},
         "elapsed_ms": int((time.time() - t0) * 1000),
     }

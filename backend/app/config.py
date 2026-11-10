@@ -29,6 +29,8 @@ PAYPAL_CLIENT_SECRET = _env("PAYPAL_CLIENT_SECRET")
 PAYPAL_BASE_URL = _env("PAYPAL_BASE_URL", "https://api-m.sandbox.paypal.com")
 # Set after registering the webhook (scripts/register_webhook.py); enables signature verification.
 PAYPAL_WEBHOOK_ID = _env("PAYPAL_WEBHOOK_ID")
+# Optional: pin the TrustLayer Plus billing plan (otherwise created once and cached in the database).
+PLUS_PLAN_ID = _env("PLUS_PLAN_ID")
 # Demo-only endpoints (reset, tamper simulation). Turn off for anything public-facing beyond a demo.
 DEMO_MODE = _env("DEMO_MODE", "true").lower() in ("1", "true", "yes")
 

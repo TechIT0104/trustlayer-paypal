@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, db, health, ledger, llm, orders, paypal, resolution, seed, webhooks
+from . import config, db, health, ledger, llm, localmodel, orders, paypal, resolution, seed, subscriptions, webhooks
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -53,6 +53,7 @@ def get_config():
     return {"paypal_client_id": config.PAYPAL_CLIENT_ID, "currency": config.CURRENCY,
             "cooling_off_seconds": config.COOLING_OFF_SECONDS, "platform_fee_pct": config.PLATFORM_FEE_PCT,
             "paypal_configured": paypal.configured(), "llm_providers": config.LLM_PROVIDERS,
+            "local_model": localmodel.info(), "demo_mode": config.DEMO_MODE,
             "buyer_hint": "Use a PayPal sandbox personal account to approve payments."}
 
 
@@ -210,6 +211,60 @@ def seller_decision(issue_id: str, body: DecisionIn):
 @app.get("/api/sellers/{seller_id}/issues")
 def seller_issues(seller_id: str):
     return resolution.seller_issues(seller_id)
+
+
+# ---------- TrustLayer Plus (PayPal Subscriptions) ----------
+
+@app.get("/api/plus")
+def plus():
+    return subscriptions.view(subscriptions.current())
+
+
+class SubIn(BaseModel):
+    subscription_id: str = Field(min_length=6, max_length=64)
+
+
+@app.post("/api/plus/subscriptions")
+def plus_register(body: SubIn):
+    return subscriptions.register(body.subscription_id)
+
+
+class DaysIn(BaseModel):
+    days: float = Field(gt=0, le=30)
+
+
+@app.post("/api/plus/{sub_id}/simulate")
+def plus_simulate(sub_id: str, body: DaysIn):
+    return subscriptions.simulate_days(sub_id, body.days)
+
+
+@app.post("/api/plus/{sub_id}/reminder")
+def plus_reminder(sub_id: str):
+    return subscriptions.reminder(sub_id)
+
+
+@app.get("/api/plus/{sub_id}/cancel-assist")
+def plus_cancel_assist(sub_id: str):
+    return subscriptions.cancel_assist(sub_id)
+
+
+class CancelIn(BaseModel):
+    reason: str = Field(default="", max_length=200)
+
+
+@app.post("/api/plus/{sub_id}/cancel")
+def plus_cancel(sub_id: str, body: CancelIn):
+    return subscriptions.cancel(sub_id, body.reason)
+
+
+@app.post("/api/plus/{sub_id}/pause")
+def plus_pause(sub_id: str):
+    return subscriptions.pause(sub_id)
+
+
+@app.post("/api/plus/{sub_id}/resume")
+def plus_resume(sub_id: str):
+    return subscriptions.resume(sub_id)
 
 
 # ---------- seller health ----------

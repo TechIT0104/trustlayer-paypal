@@ -59,6 +59,12 @@ def handle(event: dict, headers: dict) -> dict:
         o = _order_by("payout_batch_id", (res.get("batch_header") or {}).get("payout_batch_id"))
     elif etype.startswith("CHECKOUT.ORDER."):
         o = _order_by("paypal_order_id", res.get("id"))
+    elif etype.startswith("BILLING.SUBSCRIPTION.") or etype == "PAYMENT.SALE.COMPLETED":
+        from . import subscriptions
+        sub_id = subscriptions.on_webhook(etype, res)
+        ledger.append("webhook.received", {"event_id": event_id, "event_type": etype, "verified": bool(verified),
+                                           "resource_id": res.get("id"), "matched_subscription": sub_id})
+        return {"ok": True, "matched_subscription": sub_id}
 
     ledger.append("webhook.received", {"event_id": event_id, "event_type": etype, "verified": bool(verified),
                                        "resource_id": res.get("id"), "matched_order": o["id"] if o else None},

@@ -173,6 +173,7 @@ function App() {
   else if (page === "contact") body = html`<${ContactPage} token=${a} />`;
   else if (page === "sellers") body = a ? html`<${SellerPage} id=${a} />` : html`<${SellersPage} />`;
   else if (page === "ledger") body = html`<${LedgerPage} />`;
+  else if (page === "plus") body = html`<${PlusPage} cfg=${cfg} />`;
   else body = html`<div class="empty">Page not found. <a href="#/">Back to marketplace</a></div>`;
   const tab = (p, icon, label, also = []) => {
     const on = (page || "") === p || also.includes(page);
@@ -185,6 +186,7 @@ function App() {
         ${tab("", "store", "Marketplace", ["listing"])}
         ${tab("orders", "receipt", "Orders", ["order"])}
         ${tab("sellers", "activity", "Seller health")}
+        ${tab("plus", "shieldCheck", "Plus")}
         ${tab("ledger", "file", "Audit log")}
       </nav>
       <span class="env badge warning"><span class="dot"></span>PayPal Sandbox</span>
@@ -817,6 +819,127 @@ function SellerPage({ id }) {
             <ol class="actions">${ex.actions.map((a, i) => html`<li key=${i}>${a}</li>`)}</ol>
             <div class="model-line" style="margin-top:12px"><${Icon} name="sparkles" size=${12} />Written by ${ex.model}</div></div></div>`}
         </div>
+      </div>
+    </div>`;
+}
+
+// ---------------- TrustLayer Plus (PayPal Subscriptions) ----------------
+let subSdkPromise = null;
+function loadPayPalSubs(clientId) {
+  if (window.paypalSubs) return Promise.resolve(window.paypalSubs);
+  if (!subSdkPromise) {
+    subSdkPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&vault=true&intent=subscription&components=buttons`;
+      s.setAttribute("data-namespace", "paypalSubs");  // separate SDK instance: checkout uses intent=authorize
+      s.onload = () => resolve(window.paypalSubs);
+      s.onerror = () => { subSdkPromise = null; reject(new Error("PayPal SDK failed to load")); };
+      document.head.appendChild(s);
+    });
+  }
+  return subSdkPromise;
+}
+
+function SubscribeButton({ cfg, planId, onDone }) {
+  const ref = useRef(null);
+  const [state, setState] = useState("loading");
+  useEffect(() => {
+    if (!cfg?.paypal_client_id || !planId) return;
+    let dead = false;
+    loadPayPalSubs(cfg.paypal_client_id).then((pp) => {
+      if (dead || !ref.current) return;
+      ref.current.innerHTML = "";
+      pp.Buttons({
+        style: { layout: "vertical", color: "gold", shape: "rect", label: "subscribe", height: 44 },
+        createSubscription: (_d, actions) => actions.subscription.create({ plan_id: planId }),
+        onApprove: async (data) => {
+          try { onDone(await api("/api/plus/subscriptions", { method: "POST", body: { subscription_id: data.subscriptionID } })); toast("Trial started. You won't be charged for 7 days."); }
+          catch (e) { toast(e.message, true); }
+        },
+        onError: (e) => toast("PayPal error: " + (e?.message || e), true),
+      }).render(ref.current).then(() => !dead && setState("ready")).catch(() => setState("error"));
+    }).catch(() => setState("error"));
+    return () => { dead = true; };
+  }, [cfg?.paypal_client_id, planId]);
+  return html`<div>${state === "loading" && html`<div class="skeleton" style="height:44px"></div>`}<div ref=${ref}></div>
+    ${state === "error" && html`<div class="callout danger"><${Icon} name="alert" /><div>The PayPal subscription button could not load.</div></div>`}</div>`;
+}
+
+const SUB_STATUS = { ACTIVE: ["Active", "success"], APPROVED: ["Approved", "accent"], SUSPENDED: ["Paused", "warning"], CANCELLED: ["Cancelled", ""], EXPIRED: ["Expired", ""] };
+
+function PlusPage({ cfg }) {
+  const [{ data, loading, error }, reload] = useFetch("/api/plus");
+  const [busy, setBusy] = useState(false);
+  const [assist, setAssist] = useState(null);
+  const [view, setView] = useState(null);
+  useEffect(() => { if (data) setView(data); }, [data]);
+  const v = view || data;
+  const sub = v?.subscription;
+  useEffect(() => {  // generate the pre-charge reminder as soon as it becomes due
+    if (sub?.reminder_due && !sub.reminder && !busy) act(`/api/plus/${sub.id}/reminder`, null);
+  }, [sub?.reminder_due, sub?.reminder]);
+  if (loading && !v) return html`<${Loading} rows=${3} />`;
+  if (error && !v) return html`<${ErrorBox} error=${error} />`;
+  async function act(path, msg, body) {
+    setBusy(true);
+    try { setView(await api(path, { method: "POST", body })); if (msg) toast(msg); }
+    catch (e) { toast(e.message, true); } finally { setBusy(false); }
+  }
+  const openCancel = async () => { setAssist({ loading: true }); try { setAssist(await api(`/api/plus/${sub.id}/cancel-assist`)); } catch { setAssist({ message: "Cancelling takes one confirmation.", offer_pause: false }); } };
+  const plan = v.plan;
+  const date = (ts) => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "–";
+  const [stLabel, stTone] = SUB_STATUS[sub?.status] || [sub?.status, ""];
+  const promises = [["clock", `A reminder ${2} days before the first charge`, "With exactly when and how much, and whether you've actually used it."],
+    ["xCircle", "Cancel in one confirmation, any time", "No calls, no hidden menus. The cancel button is always on this page."],
+    ["activity", "We tell you if you're not using it", "If the benefits aren't paying off, we'll suggest cancelling."]];
+
+  return html`
+    <${PageHead} title="TrustLayer Plus" sub="Extra protection for marketplace payments, sold the honest way: a real free trial, a reminder before the first charge, and cancellation in one confirmation." />
+    <div class="grid cols-main">
+      <div class="stack">
+        ${!sub || ["CANCELLED", "EXPIRED"].includes(sub.status) ? html`
+          <div class="card"><div class="card-body">
+            <div class="row spread"><div><div class="eyebrow">Membership</div><h2 style="font-size:20px;margin-top:4px">${plan.name}</h2></div>
+              <div style="text-align:right"><div class="price lg">${usd(plan.price)}</div><div class="xs text-2">per month after a ${plan.trial_days}-day free trial</div></div></div>
+            <hr class="divider" />
+            ${plan.benefits.map((b) => html`<div class="signal" key=${b}><${Icon} name="check" cls="text-2" /><span>${b}</span></div>`)}
+            ${sub && html`<div class="callout info" style="margin-top:12px"><${Icon} name="info" /><div>Your previous membership was cancelled on ${date(sub.cancelled_at)}.</div></div>`}
+          </div>
+          <div class="card-foot"><${SubscribeButton} cfg=${cfg} planId=${plan.plan_id} onDone=${setView} /></div></div>`
+        : html`
+          <div class="card">
+            <div class="card-head"><div><h2>${plan.name}</h2><div class="sub mono">${sub.id}</div></div><span class=${"badge " + stTone}><span class="dot"></span>${sub.in_trial ? "Free trial" : stLabel}</span></div>
+            <div class="card-body">
+              <div class="grid cols-stats" style="gap:0;border:1px solid var(--border);border-radius:10px">
+                ${[["First charge", sub.in_trial ? `${usd(sub.price)} on ${date(sub.next_billing_at)}` : usd(sub.price) + "/mo"], ["Days until charge", sub.status === "SUSPENDED" ? "Paused" : sub.days_until_charge],
+                   ["Payments protected", sub.usage.payments_protected], ["Money kept safe", usd(sub.usage.money_kept_safe)]].map(([l, val], i) => html`
+                  <div class="stat" key=${l} style=${{ borderLeft: i ? "1px solid var(--border)" : "0" }}><div class="l">${l}</div><div class="v" style="font-size:20px">${val}</div></div>`)}
+              </div>
+              ${sub.reminder && html`<div class=${"callout " + (sub.reminder.recommendation === "cancel" ? "warning" : "info")} style="margin-top:16px">
+                <${Icon} name="clock" /><div><b>${sub.reminder.headline}</b><div style="margin-top:2px">${sub.reminder.body}</div>
+                  <div style="margin-top:6px;font-weight:600">${sub.reminder.fact}</div>
+                  ${sub.reminder.why && html`<div class="xs" style="margin-top:4px">Our recommendation: <b>${sub.reminder.recommendation}</b>. ${sub.reminder.why}</div>`}</div></div>`}
+              ${assist ? html`<div class="callout danger" style="margin-top:16px;align-items:center">
+                  <${Icon} name="xCircle" /><div style="flex:1">${assist.loading ? html`<${Spinner} />` : assist.message}</div></div>
+                <div class="row" style="margin-top:10px">
+                  <button class="btn danger" disabled=${busy || assist.loading} onClick=${() => { setAssist(null); act(`/api/plus/${sub.id}/cancel`, "Cancelled. You will not be charged.", { reason: "cancelled from the Plus page" }); }}>Cancel now</button>
+                  ${assist.offer_pause && html`<button class="btn" disabled=${busy} onClick=${() => { setAssist(null); act(`/api/plus/${sub.id}/pause`, "Paused. No charges while paused."); }}>Pause instead</button>`}
+                  <button class="btn ghost" onClick=${() => setAssist(null)}>Keep membership</button></div>`
+              : html`<div class="row" style="margin-top:16px">
+                  <button class="btn" disabled=${busy} onClick=${openCancel}><${Icon} name="xCircle" />Cancel subscription</button>
+                  ${sub.status === "SUSPENDED" && html`<button class="btn primary" disabled=${busy} onClick=${() => act(`/api/plus/${sub.id}/resume`, "Resumed.")}>Resume</button>`}
+                  ${busy && html`<span class="sm text-2"><${Spinner} /> Talking to PayPal</span>`}</div>`}
+            </div>
+            ${cfg?.demo_mode !== false && sub.in_trial && html`<div class="card-foot row spread"><span class="xs text-2">Demo control: move this trial's clock forward${sub.simulated_days ? ` (now +${sub.simulated_days} days)` : ""}</span>
+              <button class="btn sm" disabled=${busy} onClick=${() => act(`/api/plus/${sub.id}/simulate`, "Moved forward 5 days.", { days: 5 })}><${Icon} name="clock" size=${14} />Simulate +5 days</button></div>`}
+          </div>`}
+      </div>
+      <div class="stack sticky">
+        <div class="card"><div class="card-head"><h2>Our promises</h2></div><div class="card-body">
+          ${promises.map(([icon, t, d]) => html`<div class="finding" key=${t}><span class="ic accent" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none"><${Icon} name=${icon} size=${14} /></span>
+            <div><div style="font-weight:500">${t}</div><div class="sm text-2">${d}</div></div></div>`)}
+        </div></div>
+        <div class="card"><div class="card-body"><div class="xs text-2">About 7 in 10 US adults have been charged after forgetting a free trial (2026 surveys), and 20+ US states now require click-to-cancel. Plus is built to the opposite standard. Billing runs on PayPal Subscriptions; status is verified with PayPal and kept in sync by webhooks.</div></div></div>
       </div>
     </div>`;
 }

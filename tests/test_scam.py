@@ -117,6 +117,28 @@ def test_falls_back_to_rules_when_every_llm_is_down(fake_llm):
     assert r["verdict"] == "PAUSE"  # two strong rules corroborate each other
 
 
+def test_local_model_alone_never_pauses_without_a_rule_signal(fake_llm, fake_local_model):
+    fake_llm.down = True
+    fake_local_model.p = 0.99
+    r = scam.assess(FAIR, OLD_SELLER, chat(("seller", "hi, it ships tomorrow")))
+    assert r["verdict"] == "CAUTION" and r["local_model"]["p_scam"] == 0.99
+
+
+def test_llm_outage_falls_back_to_rules_plus_local_model(fake_llm, fake_local_model):
+    fake_llm.down = True
+    fake_local_model.p = 0.97
+    # one weak rule (urgency) alone would only be CLEAR; with a confident model it becomes a pause
+    r = scam.assess(FAIR, OLD_SELLER, chat(("seller", "3 others are interested, first come first served, pay now")))
+    assert not [s for s in r["signals"] if s["strong"]] and r["verdict"] == "PAUSE"
+
+
+def test_local_model_cannot_overrule_a_clean_llm_verdict(fake_llm, fake_local_model):
+    fake_local_model.p = 0.95
+    fake_llm.scam = {"risk": 0.05, "scam_type": "none", "evidence": []}
+    r = scam.assess(FAIR, OLD_SELLER, chat(("seller", "ships tomorrow with tracking")))
+    assert r["verdict"] != "PAUSE"
+
+
 def test_rules_mode_never_calls_the_llm(fake_llm):
     fake_llm.down = True
     r = scam.assess(FAIR, OLD_SELLER, chat(("seller", "hi")), mode="rules")

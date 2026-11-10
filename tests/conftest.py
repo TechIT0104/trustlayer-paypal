@@ -11,6 +11,7 @@ _TMP = tempfile.mkdtemp(prefix="trustlayer-test-")
 os.environ["DB_PATH"] = str(pathlib.Path(_TMP) / "test.db")
 os.environ["COOLING_OFF_SECONDS"] = "120"
 os.environ["PAYPAL_WEBHOOK_ID"] = ""
+os.environ["PLUS_PLAN_ID"] = ""
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
@@ -70,6 +71,35 @@ class FakePayPal:
     def verify_webhook(self, headers, event, webhook_id):
         return headers.get("x-test-valid") == "1"
 
+    # --- subscriptions ---
+    sub_status = "ACTIVE"
+    sub_plan = "P-TEST"
+
+    def create_product(self, name, description, ref):
+        self.calls.append(("create_product", name))
+        return {"id": "PROD-TEST"}
+
+    def create_plan(self, product_id, name, price, trial_days, ref):
+        self.calls.append(("create_plan", price, trial_days))
+        return {"id": "P-TEST"}
+
+    def get_subscription(self, sub_id):
+        self.calls.append(("get_subscription", sub_id))
+        return {"id": sub_id, "status": self.sub_status, "plan_id": self.sub_plan,
+                "billing_info": {"next_billing_time": "2026-11-18T10:00:00Z"}}
+
+    def cancel_subscription(self, sub_id, reason):
+        self.calls.append(("cancel_subscription", sub_id))
+        return {}
+
+    def suspend_subscription(self, sub_id, reason):
+        self.calls.append(("suspend_subscription", sub_id))
+        return {}
+
+    def activate_subscription(self, sub_id):
+        self.calls.append(("activate_subscription", sub_id))
+        return {}
+
     def named(self, name):
         return [c for c in self.calls if c[0] == name]
 
@@ -99,11 +129,31 @@ class FakeLLM:
         return {"data": data, "provider": "fake", "model": "fake-model", "latency_ms": 1, "cached": False}
 
 
+class FakeLocalModel:
+    def __init__(self):
+        self.p = None  # None = model not installed
+
+    def predict(self, listing, seller, messages):
+        if self.p is None:
+            return None
+        return {"p_scam": self.p, "threshold": 0.5, "latency_ms": 1, "model": "fake-local"}
+
+
+@pytest.fixture(autouse=True)
+def fake_local_model(monkeypatch):
+    """Keep tests deterministic whether or not a trained model file is present on disk."""
+    from backend.app import localmodel
+    fm = FakeLocalModel()
+    monkeypatch.setattr(localmodel, "predict", fm.predict)
+    return fm
+
+
 @pytest.fixture()
 def fake_paypal(monkeypatch):
     fp = FakePayPal()
     for name in ("create_order", "authorize_order", "capture_authorization", "void_authorization", "reauthorize",
-                 "refund_capture", "create_payout", "get_payout", "verify_webhook"):
+                 "refund_capture", "create_payout", "get_payout", "verify_webhook", "create_product", "create_plan",
+                 "get_subscription", "cancel_subscription", "suspend_subscription", "activate_subscription"):
         monkeypatch.setattr(paypal, name, getattr(fp, name))
     return fp
 
@@ -118,6 +168,7 @@ def fake_llm(monkeypatch):
 @pytest.fixture()
 def fresh_db():
     seed.run(force=True)
+    db.run("DELETE FROM kv")
     yield
     config.PAYPAL_WEBHOOK_ID = ""
     config.DEMO_MODE = True

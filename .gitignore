@@ -13,3 +13,6 @@ scripts/.spike_order
 eval/results/*.raw.jsonl
 scripts/e2e_shots/
 eval/results/
+.venv-train/
+models/checkpoints/
+

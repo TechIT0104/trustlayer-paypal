@@ -7,6 +7,7 @@ false alarms are the main reason scam warnings get ignored.
 Usage: .venv/Scripts/python eval/run_eval.py
 Writes eval/results/summary.json and eval/results/per_example.jsonl
 """
+import hashlib
 import json
 import pathlib
 import statistics
@@ -15,7 +16,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from backend.app import config, llm, scam  # noqa: E402
+from backend.app import config, llm, localmodel, scam  # noqa: E402
 
 config.LLM_PROVIDERS = ["groq"]  # one model for a clean measurement (the app itself falls back to Gemini)
 # Usage: run_eval.py [dataset.jsonl] [results_dir]. Defaults: the held-out test set.
@@ -78,29 +79,57 @@ def metrics(rows: list[dict], key: str) -> dict:
             "scams_fully_missed": round(missed_any / n_scam, 3) if n_scam else 0.0}
 
 
+CACHE = ROOT / "eval" / "results" / "llm_cache.json"
+
+
+def install_disk_cache() -> None:
+    """Persist LLM answers so re-scoring (e.g. after training the local model) makes no new calls."""
+    store = json.loads(CACHE.read_text()) if CACHE.exists() else {}
+    real = llm.complete_json
+
+    def cached(system, user, temperature=0.1, use_cache=True, providers=None):
+        key = hashlib.sha256(json.dumps([system, user, temperature]).encode()).hexdigest()
+        if key in store:
+            return {**store[key], "cached": True}
+        res = real(system, user, temperature, use_cache, providers)
+        store[key] = {k: v for k, v in res.items() if k != "cached"}
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps(store))
+        return res
+
+    llm.complete_json = cached
+
+
 def main() -> None:
     OUTDIR.mkdir(parents=True, exist_ok=True)
+    install_disk_cache()
     rows = load()
-    print(f"{len(rows)} examples: {sum(r['label'] == 'scam' for r in rows)} scam / {sum(r['label'] == 'legit' for r in rows)} legit")
+    has_model = localmodel.available()
+    print(f"{len(rows)} examples: {sum(r['label'] == 'scam' for r in rows)} scam / {sum(r['label'] == 'legit' for r in rows)} legit"
+          f" | local model: {localmodel.info()}")
     per, lat = [], []
     for i, r in enumerate(rows, 1):
         rr = run_one(r, "rules")
         lm = run_one(r, "llm")
         fu = run_one(r, "fused")  # reuses the cached LLM call from "llm" mode: same prompt
+        mo = run_one(r, "model") if has_model else None
+        nl = run_one(r, "fused_no_llm") if has_model else None
         ai = fu.get("ai") or {}
-        if ai and not ai.get("cached"):
-            lat.append(ai["latency_ms"])
-        elif lm.get("ai") and not lm["ai"].get("cached"):
+        if lm.get("ai") and not lm["ai"].get("cached"):
             lat.append(lm["ai"]["latency_ms"])
         rec = {"id": r["id"], "label": r["label"], "type": r["type"],
                "rules": rr["verdict"], "llm": lm["verdict"], "fused": fu["verdict"],
+               "model": mo["verdict"] if mo else None, "fused_no_llm": nl["verdict"] if nl else None,
+               "p_model": (fu.get("local_model") or {}).get("p_scam"),
                "score": fu["score"], "rule_keys": [s["key"] for s in fu["signals"]],
                "ai_type": ai.get("scam_type"), "ai_risk": ai.get("risk"),
                "grounded": len(ai.get("evidence", [])), "dropped": ai.get("dropped_evidence", 0)}
         per.append(rec)
         flag = "" if (rec["fused"] == "PAUSE") == (r["label"] == "scam") else "  <-- miss" if r["label"] == "scam" else "  <-- FALSE PAUSE"
-        print(f"[{i:3d}] {r['id']} {r['label']:5s} {r['type']:22s} rules={rec['rules']:7s} llm={rec['llm']:7s} fused={rec['fused']:7s}{flag}", flush=True)
-        time.sleep(1.5)  # stay under free-tier tokens/minute
+        print(f"[{i:3d}] {r['id']} {r['label']:5s} {r['type']:22s} rules={rec['rules']:7s} llm={rec['llm']:7s} "
+              f"fused={rec['fused']:7s} model={rec['model']} p={rec['p_model']}{flag}", flush=True)
+        if lm.get("ai") and not lm["ai"].get("cached"):
+            time.sleep(1.5)  # stay under free-tier tokens/minute
     with (OUTDIR / "per_example.jsonl").open("w", encoding="utf-8") as f:
         for p in per:
             f.write(json.dumps(p) + "\n")
@@ -110,6 +139,9 @@ def main() -> None:
         "n": len(per), "n_scam": len(scams), "n_legit": len(per) - len(scams),
         "classifier_model": config.GROQ_MODEL, "dataset": str(DATA.relative_to(ROOT)),
         "rules": metrics(per, "rules"), "llm": metrics(per, "llm"), "fused": metrics(per, "fused"),
+        "model": metrics(per, "model") if has_model else None,
+        "fused_no_llm": metrics(per, "fused_no_llm") if has_model else None,
+        "local_model": localmodel.info(),
         "tactic_accuracy_on_scams": round(type_ok / len(scams), 3) if scams else None,
         "ungrounded_quotes_dropped": sum(p["dropped"] for p in per),
         "llm_latency_ms": {"p50": int(statistics.median(lat)) if lat else None,

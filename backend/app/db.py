@@ -43,6 +43,14 @@ CREATE TABLE IF NOT EXISTS seller_daily (
     refunds INTEGER, gross REAL, prevented INTEGER DEFAULT 0,
     PRIMARY KEY (seller_id, day)
 );
+CREATE TABLE IF NOT EXISTS kv (
+    k TEXT PRIMARY KEY, v TEXT
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id TEXT PRIMARY KEY, plan_id TEXT, status TEXT, started_at REAL, trial_ends_at REAL,
+    next_billing_at REAL, price REAL, clock_offset REAL DEFAULT 0, reminder_json TEXT,
+    cancel_reason TEXT, cancelled_at REAL, paypal_json TEXT, created_at REAL, updated_at REAL
+);
 CREATE TABLE IF NOT EXISTS events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, type TEXT, order_id TEXT,
     seller_id TEXT, data_json TEXT, prev_hash TEXT, hash TEXT
@@ -110,7 +118,7 @@ def loads(value: str | None, default=None):
 def reset() -> None:
     with _lock:
         c = conn()
-        for table in ("sellers", "listings", "messages", "orders", "issues", "seller_daily", "events"):
+        for table in ("sellers", "listings", "messages", "orders", "issues", "seller_daily", "events", "subscriptions"):
             c.execute(f"DELETE FROM {table}")
         c.execute("DELETE FROM sqlite_sequence")
         c.commit()

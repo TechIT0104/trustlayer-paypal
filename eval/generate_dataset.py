@@ -20,15 +20,20 @@ import httpx
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from backend.app import config  # noqa: E402
 
-GEN_MODEL = "qwen/qwen3.8-27b"
-# Usage: generate_dataset.py [per_spec] [dev|test]
-#   dev  -> eval/data/chats.jsonl       (used while developing; the engine was adjusted after looking at it)
-#   test -> eval/data/test_chats.jsonl  (held out: generated after all changes, only ever scored)
+# Usage: generate_dataset.py [per_spec] [dev|test|train] [generator_model]
+#   dev   -> eval/data/chats.jsonl        (qwen; used while developing the rules/fusion)
+#   test  -> eval/data/test_chats.jsonl   (qwen; held out, generated after all changes, only ever scored)
+#   train -> eval/data/train_chats.jsonl  (gpt-oss-20b; training data for the fine-tuned local model)
 PER_SPEC = int(sys.argv[1]) if len(sys.argv) > 1 else 5
 SPLIT = sys.argv[2] if len(sys.argv) > 2 else "dev"
-OUT = pathlib.Path(__file__).resolve().parent / "data" / ("test_chats.jsonl" if SPLIT == "test" else "chats.jsonl")
-EXTRA = ("\nThis is a held-out test set: use different items, names, prices and phrasing than the most typical "
-         "examples; vary how directly the tactic is stated." if SPLIT == "test" else "")
+GEN_MODEL = sys.argv[3] if len(sys.argv) > 3 else ("openai/gpt-oss-20b" if SPLIT == "train" else "qwen/qwen3.8-27b")
+OUT = pathlib.Path(__file__).resolve().parent / "data" / {"test": "test_chats.jsonl", "train": "train_chats.jsonl"}.get(SPLIT, "chats.jsonl")
+PREFIX = {"test": "T", "train": "R"}.get(SPLIT, "")
+EXTRA = {"test": "\nThis is a held-out test set: use different items, names, prices and phrasing than the most typical "
+                 "examples; vary how directly the tactic is stated.",
+         "train": "\nVary the item category, price range, tone and message length a lot across examples; some sellers "
+                  "are terse, some chatty; include typos in some."}.get(SPLIT, "")
+REASONING = "low" if "gpt-oss" in GEN_MODEL else "none"
 
 SPECS = [
     # (label, type, instruction)
@@ -82,7 +87,7 @@ def _parse(text: str) -> dict:
 
 
 def generate(instruction: str, n: int) -> tuple[list, dict]:
-    body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 1900, "reasoning_effort": "none",
+    body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 2600 if "gpt-oss" in GEN_MODEL else 1900, "reasoning_effort": REASONING,
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": SYSTEM},
                          {"role": "user", "content": TEMPLATE.format(n=n, instruction=instruction) + EXTRA}]}
@@ -125,19 +130,24 @@ def main() -> None:
     for e in existing:
         have[e["type"]] = have.get(e["type"], 0) + 1
     k = len(existing)
-    for label, typ, instruction in SPECS:
-        if have.get(typ, 0) >= PER_SPEC - 1:
-            print(f"skip  {typ:28s} (have {have[typ]})")
+    rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 1  # batches of PER_SPEC per scenario
+    jobs = [(label, typ, ins, r) for r in range(rounds) for label, typ, ins in SPECS]
+    for label, typ, instruction, rnd in jobs:
+        if have.get(typ, 0) >= PER_SPEC * (rnd + 1) - 1:
+            print(f"skip  {typ:28s} round {rnd} (have {have.get(typ, 0)})")
             continue
+        have[typ] = have.get(typ, 0) + PER_SPEC  # optimistic; corrected on the next run's recount
         t0 = time.time()
         exs, headers = generate(instruction, PER_SPEC)
         good = []
         for ex in exs[:PER_SPEC]:
-            chat = [m for m in ex.get("chat", []) if m.get("sender") in ("buyer", "seller") and m.get("text")]
+            if not isinstance(ex, dict) or not isinstance(ex.get("chat"), list):
+                continue  # some generators occasionally return malformed items; skip them
+            chat = [m for m in ex["chat"] if isinstance(m, dict) and m.get("sender") in ("buyer", "seller") and m.get("text")]
             if len(chat) < 3 or not isinstance(ex.get("listing"), dict) or not isinstance(ex.get("seller"), dict):
                 continue
             k += 1
-            good.append({"id": f"{'T' if SPLIT == 'test' else ''}{label[0]}{k:03d}", "label": label, "type": typ, "listing": ex["listing"],
+            good.append({"id": f"{PREFIX}{label[0]}{k:03d}", "label": label, "type": typ, "listing": ex["listing"],
                          "seller": ex["seller"], "chat": chat, "source": f"generated:{GEN_MODEL}"})
         with OUT.open("a", encoding="utf-8") as f:
             for g in good:

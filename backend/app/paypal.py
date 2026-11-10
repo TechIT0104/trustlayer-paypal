@@ -172,6 +172,53 @@ def reauthorize(authorization_id: str, amount: float, order_ref: str) -> dict:
                  {"amount": _money(amount)}, request_id=f"{order_ref}-reauth-{int(time.time() // 86400)}")
 
 
+# ---------- Subscriptions v1 (Catalog products + Billing plans + Subscriptions) ----------
+
+def create_product(name: str, description: str, ref: str) -> dict:
+    return _call("POST", "/v1/catalogs/products", "create_product",
+                 {"name": name, "description": description, "type": "SERVICE", "category": "SOFTWARE"},
+                 request_id=f"product-{ref}")
+
+
+def create_plan(product_id: str, name: str, monthly_price: float, trial_days: int, ref: str) -> dict:
+    cycles = []
+    if trial_days > 0:  # free trial: TRIAL cycle with no price, sequence 1, before the REGULAR cycle
+        cycles.append({"frequency": {"interval_unit": "DAY", "interval_count": trial_days},
+                       "tenure_type": "TRIAL", "sequence": 1, "total_cycles": 1})
+    cycles.append({"frequency": {"interval_unit": "MONTH", "interval_count": 1}, "tenure_type": "REGULAR",
+                   "sequence": len(cycles) + 1, "total_cycles": 0,
+                   "pricing_scheme": {"fixed_price": _money(monthly_price)}})
+    return _call("POST", "/v1/billing/plans", "create_plan", {
+        "product_id": product_id, "name": name, "status": "ACTIVE",
+        "description": f"{name}: ${monthly_price:.2f}/month after a {trial_days}-day free trial. Cancel anytime.",
+        "billing_cycles": cycles,
+        "payment_preferences": {"auto_bill_outstanding": True, "payment_failure_threshold": 1},
+    }, request_id=f"plan-{ref}")
+
+
+def list_plans(product_id: str) -> dict:
+    return _call("GET", f"/v1/billing/plans?product_id={product_id}&page_size=20", "list_plans")
+
+
+def get_subscription(subscription_id: str) -> dict:
+    return _call("GET", f"/v1/billing/subscriptions/{subscription_id}", "get_subscription")
+
+
+def cancel_subscription(subscription_id: str, reason: str) -> dict:
+    return _call("POST", f"/v1/billing/subscriptions/{subscription_id}/cancel", "cancel_subscription",
+                 {"reason": reason[:127] or "Cancelled by subscriber"})
+
+
+def suspend_subscription(subscription_id: str, reason: str) -> dict:
+    return _call("POST", f"/v1/billing/subscriptions/{subscription_id}/suspend", "suspend_subscription",
+                 {"reason": reason[:127] or "Paused by subscriber"})
+
+
+def activate_subscription(subscription_id: str) -> dict:
+    return _call("POST", f"/v1/billing/subscriptions/{subscription_id}/activate", "activate_subscription",
+                 {"reason": "Resumed by subscriber"})
+
+
 # ---------- Webhooks ----------
 
 WEBHOOK_EVENTS = [
@@ -182,6 +229,8 @@ WEBHOOK_EVENTS = [
     "PAYMENT.PAYOUTS-ITEM.SUCCEEDED", "PAYMENT.PAYOUTS-ITEM.UNCLAIMED", "PAYMENT.PAYOUTS-ITEM.FAILED",
     "PAYMENT.PAYOUTS-ITEM.BLOCKED", "PAYMENT.PAYOUTS-ITEM.RETURNED",
     "CUSTOMER.DISPUTE.CREATED",
+    "BILLING.SUBSCRIPTION.ACTIVATED", "BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.SUSPENDED",
+    "BILLING.SUBSCRIPTION.PAYMENT.FAILED", "PAYMENT.SALE.COMPLETED",
 ]
 
 

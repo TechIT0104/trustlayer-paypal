@@ -78,6 +78,16 @@ Plus is a $4.99/month membership sold on **PayPal Subscriptions** that works the
   got real value; code decides that, and it can never block cancelling.
 - Pause/resume (suspend/activate), and `BILLING.SUBSCRIPTION.*` / `PAYMENT.SALE.COMPLETED` webhooks keep state in sync.
 
+**The same kit for sellers.** Any seller can sell their own membership (the demo seeds Maya's "Film Roll Club",
+$12/month with a 14-day trial) from their seller page:
+- **Terms review before launch:** the LLM flags dark patterns and vague promises in the seller's wording and suggests
+  clearer text. **Code blocks the hard traps** (call/email to cancel, cancellation fees, minimum terms, "no cancellations"),
+  including in the AI's own rewrite, and writes the price/renewal/trial/cancel disclosure every subscriber sees.
+- Publishing creates a real PayPal catalog product and billing plan for that seller.
+- A **subscriber dashboard** with trial/active status, "record a delivery", and a **forgotten-trial chargeback risk** flag
+  (trial subscribers about to be charged who never received anything). That flag also appears in seller health,
+  because those charges come back as disputes.
+
 ### Plus: a hash-chained audit ledger
 Every PayPal call and every AI decision is written to an append-only, SHA-256 hash-chained ledger with the PayPal
 IDs it produced (order, authorization, capture, refund, payout batch). Edit any record and verification names the break.
@@ -190,8 +200,8 @@ Open **http://127.0.0.1:8000**. Demo data seeds itself on first start, and **Led
 ### Tests
 ```bash
 pip install -r backend/requirements-dev.txt
-python -m pytest tests            # 43 offline tests: ledger, scam rules + grounding + fusion, refund policy,
-                                  # every order path, webhooks, reauthorization, declined funding (fake PayPal + fake LLM)
+python -m pytest tests            # 65 offline tests: ledger, scam rules + grounding + fusion + local model, refund policy,
+                                  # every order path, webhooks, subscriptions + seller kit, reauthorization (fake PayPal + fake LLM)
 python scripts/e2e_paypal.py      # real sandbox: approve → hold → AI settlement → capture → payout; and scam → pause → void
 python scripts/ui_smoke.py        # headless: every page renders, no console errors, mobile layout
 python eval/run_eval.py && python eval/report.py   # Pay-pause precision / recall / false-pause rate → NUMBERS.md

@@ -110,4 +110,6 @@ def run(force: bool = False) -> None:
         for d, v in days.items():
             db.run("INSERT INTO seller_daily VALUES (?,?,?,?,?,?,?)",
                    (sid, d, v["orders"], v["disputes"], v["refunds"], v["gross"], v["prevented"]))
+    from . import subscriptions
+    subscriptions.seed_offerings()
     ledger.append("system.seeded", {"sellers": len(SELLERS), "listings": len(LISTINGS)})

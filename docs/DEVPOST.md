@@ -33,7 +33,10 @@ and extended the idea to the two other moments where trust fails.
 4. **TrustLayer Plus: subscriptions without the trap.** A $4.99/month membership on PayPal Subscriptions with a real
    free trial, verified with PayPal before access is granted. Two days before the first charge an AI-written reminder
    says honestly whether you've used it (and suggests cancelling if not); the charge date and amount are stated by code.
-   Cancelling takes one confirmation and is always on the page.
+   Cancelling takes one confirmation and is always on the page. **Sellers get the same kit:** an AI terms review that
+   flags dark patterns (code hard-blocks call-to-cancel, cancellation fees and minimum terms, even in the AI's own
+   rewrite), a real PayPal plan per offering, and a subscriber dashboard that flags trial subscribers about to be
+   charged without ever using it, the classic source of chargebacks.
 5. **A model we fine-tuned ourselves.** A public DistilBERT scam classifier (trained on phone-scam calls) fine-tuned on
    marketplace payment chats, quantized to ONNX int8 and run on CPU inside the API in about 80 ms. Out of the box it
    flagged 59% of honest marketplace chats; after fine-tuning, 0% (dev set). When every hosted LLM is down, rules plus
@@ -53,7 +56,7 @@ and extended the idea to the two other moments where trust fails.
 - **Evaluation done properly:** three disjoint datasets from three different generator models (train, dev, held-out
   test); the engine and the model's threshold were tuned on dev only; the test set was generated after every change and
   scored once.
-- **Stack:** FastAPI + SQLite, a no-build React frontend, deployed on Render. 57 offline tests (fake PayPal and fake
+- **Stack:** FastAPI + SQLite, a no-build React frontend, deployed on Render. 65 offline tests (fake PayPal and fake
   LLM), a real-sandbox end-to-end test, and a headless UI test.
 - **Dev tooling:** Claude Code with the PayPal AI Toolkit plugin and sandbox MCP server.
 

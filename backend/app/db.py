@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS seller_daily (
 CREATE TABLE IF NOT EXISTS kv (
     k TEXT PRIMARY KEY, v TEXT
 );
+CREATE TABLE IF NOT EXISTS offerings (
+    id TEXT PRIMARY KEY, seller_id TEXT, name TEXT, description TEXT, price REAL, trial_days INTEGER,
+    benefits_json TEXT, review_json TEXT, status TEXT, created_at REAL, updated_at REAL
+);
 CREATE TABLE IF NOT EXISTS subscriptions (
     id TEXT PRIMARY KEY, plan_id TEXT, status TEXT, started_at REAL, trial_ends_at REAL,
     next_billing_at REAL, price REAL, clock_offset REAL DEFAULT 0, reminder_json TEXT,
@@ -79,6 +83,9 @@ MIGRATIONS = [
     ("orders", "payout_status", "TEXT"),
     ("orders", "auth_expires", "TEXT"),
     ("orders", "authorized_at", "REAL"),
+    ("subscriptions", "offering_id", "TEXT"),
+    ("subscriptions", "seller_id", "TEXT"),
+    ("subscriptions", "uses", "INTEGER DEFAULT 0"),
 ]
 
 
@@ -118,7 +125,8 @@ def loads(value: str | None, default=None):
 def reset() -> None:
     with _lock:
         c = conn()
-        for table in ("sellers", "listings", "messages", "orders", "issues", "seller_daily", "events", "subscriptions"):
+        for table in ("sellers", "listings", "messages", "orders", "issues", "seller_daily", "events", "subscriptions",
+                      "offerings"):
             c.execute(f"DELETE FROM {table}")
         c.execute("DELETE FROM sqlite_sequence")
         c.commit()

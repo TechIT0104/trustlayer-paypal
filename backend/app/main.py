@@ -223,25 +223,106 @@ def plus():
 
 class SubIn(BaseModel):
     subscription_id: str = Field(min_length=6, max_length=64)
+    offering_id: str = "plus"
 
 
 @app.post("/api/plus/subscriptions")
 def plus_register(body: SubIn):
-    return subscriptions.register(body.subscription_id)
+    return subscriptions.view(subscriptions.get(subscriptions.register(body.subscription_id, "plus")["id"]))
 
 
 class DaysIn(BaseModel):
     days: float = Field(gt=0, le=30)
 
 
+class CancelIn(BaseModel):
+    reason: str = Field(default="", max_length=200)
+
+
+# Generic subscriptions (TrustLayer Plus and every seller's offerings)
+
+@app.get("/api/offerings")
+def offerings_list():
+    return subscriptions.list_offerings()
+
+
+@app.get("/api/subscriptions")
+def my_subscriptions():
+    return subscriptions.mine()
+
+
+@app.post("/api/subscriptions")
+def subscription_register(body: SubIn):
+    return subscriptions.register(body.subscription_id, body.offering_id)
+
+
+@app.post("/api/subscriptions/{sub_id}/simulate")
+def sub_simulate(sub_id: str, body: DaysIn):
+    return subscriptions.simulate_days(sub_id, body.days)
+
+
+@app.post("/api/subscriptions/{sub_id}/reminder")
+def sub_reminder(sub_id: str):
+    return subscriptions.reminder(sub_id)
+
+
+@app.get("/api/subscriptions/{sub_id}/cancel-assist")
+def sub_cancel_assist(sub_id: str):
+    return subscriptions.cancel_assist(sub_id)
+
+
+@app.post("/api/subscriptions/{sub_id}/cancel")
+def sub_cancel(sub_id: str, body: CancelIn):
+    return subscriptions.cancel(sub_id, body.reason)
+
+
+@app.post("/api/subscriptions/{sub_id}/pause")
+def sub_pause(sub_id: str):
+    return subscriptions.pause(sub_id)
+
+
+@app.post("/api/subscriptions/{sub_id}/resume")
+def sub_resume(sub_id: str):
+    return subscriptions.resume(sub_id)
+
+
+@app.post("/api/subscriptions/{sub_id}/delivery")
+def sub_delivery(sub_id: str):
+    return subscriptions.record_use(sub_id)
+
+
+class OfferingIn(BaseModel):
+    name: str = Field(min_length=3, max_length=60)
+    description: str = Field(min_length=10, max_length=600)
+    price: float = Field(gt=0, le=500)
+    trial_days: int = Field(ge=0, le=30)
+
+
+@app.post("/api/sellers/{seller_id}/offerings/review")
+def offering_review(seller_id: str, body: OfferingIn):
+    return subscriptions.review_terms(body.name, body.description, body.price, body.trial_days)
+
+
+@app.post("/api/sellers/{seller_id}/offerings")
+def offering_create(seller_id: str, body: OfferingIn):
+    return subscriptions.create_offering(seller_id, body.name, body.description, body.price, body.trial_days)
+
+
+@app.get("/api/sellers/{seller_id}/subscribers")
+def seller_subscribers(seller_id: str):
+    return subscriptions.seller_subscribers(seller_id)
+
+
 @app.post("/api/plus/{sub_id}/simulate")
 def plus_simulate(sub_id: str, body: DaysIn):
-    return subscriptions.simulate_days(sub_id, body.days)
+    subscriptions.simulate_days(sub_id, body.days)
+    return subscriptions.view(subscriptions.get(sub_id))
 
 
 @app.post("/api/plus/{sub_id}/reminder")
 def plus_reminder(sub_id: str):
-    return subscriptions.reminder(sub_id)
+    subscriptions.reminder(sub_id)
+    return subscriptions.view(subscriptions.get(sub_id))
 
 
 @app.get("/api/plus/{sub_id}/cancel-assist")
@@ -249,23 +330,22 @@ def plus_cancel_assist(sub_id: str):
     return subscriptions.cancel_assist(sub_id)
 
 
-class CancelIn(BaseModel):
-    reason: str = Field(default="", max_length=200)
-
-
 @app.post("/api/plus/{sub_id}/cancel")
 def plus_cancel(sub_id: str, body: CancelIn):
-    return subscriptions.cancel(sub_id, body.reason)
+    subscriptions.cancel(sub_id, body.reason)
+    return subscriptions.view(subscriptions.get(sub_id))
 
 
 @app.post("/api/plus/{sub_id}/pause")
 def plus_pause(sub_id: str):
-    return subscriptions.pause(sub_id)
+    subscriptions.pause(sub_id)
+    return subscriptions.view(subscriptions.get(sub_id))
 
 
 @app.post("/api/plus/{sub_id}/resume")
 def plus_resume(sub_id: str):
-    return subscriptions.resume(sub_id)
+    subscriptions.resume(sub_id)
+    return subscriptions.view(subscriptions.get(sub_id))
 
 
 # ---------- seller health ----------

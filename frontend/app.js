@@ -173,7 +173,7 @@ function App() {
   else if (page === "contact") body = html`<${ContactPage} token=${a} />`;
   else if (page === "sellers") body = a ? html`<${SellerPage} id=${a} />` : html`<${SellersPage} />`;
   else if (page === "ledger") body = html`<${LedgerPage} />`;
-  else if (page === "plus") body = html`<${PlusPage} cfg=${cfg} />`;
+  else if (page === "plus" || page === "subscriptions") body = html`<${SubscriptionsPage} cfg=${cfg} />`;
   else body = html`<div class="empty">Page not found. <a href="#/">Back to marketplace</a></div>`;
   const tab = (p, icon, label, also = []) => {
     const on = (page || "") === p || also.includes(page);
@@ -186,7 +186,7 @@ function App() {
         ${tab("", "store", "Marketplace", ["listing"])}
         ${tab("orders", "receipt", "Orders", ["order"])}
         ${tab("sellers", "activity", "Seller health")}
-        ${tab("plus", "shieldCheck", "Plus")}
+        ${tab("subscriptions", "receipt", "Subscriptions", ["plus"])}
         ${tab("ledger", "file", "Audit log")}
       </nav>
       <span class="env badge warning"><span class="dot"></span>PayPal Sandbox</span>
@@ -777,6 +777,7 @@ function SellerPage({ id }) {
       </div></div></div>
     <div class="stack">
       <${SellerInbox} id=${id} onChange=${reload} />
+      <${SellerSubscriptions} id=${id} onChange=${reload} />
       <div class="card grid cols-stats" style="gap:0">
         ${[["Sales, 30 days", k.transactions_30d, ""], ["Dispute rate", k.dispute_rate.toFixed(2) + "%", `Line at ${m.thresholds.dispute_line}%`],
            ["Disputes avoided", k.prevented_30d, "by early resolution"], ["Refund rate", k.refund_rate.toFixed(1) + "%", ""],
@@ -825,7 +826,7 @@ function SellerPage({ id }) {
     </div>`;
 }
 
-// ---------------- TrustLayer Plus (PayPal Subscriptions) ----------------
+// ---------------- Subscriptions (PayPal Subscriptions: TrustLayer Plus + seller kit) ----------------
 let subSdkPromise = null;
 function loadPayPalSubs(clientId) {
   if (window.paypalSubs) return Promise.resolve(window.paypalSubs);
@@ -842,108 +843,185 @@ function loadPayPalSubs(clientId) {
   return subSdkPromise;
 }
 
-function SubscribeButton({ cfg, planId, onDone }) {
+function SubscribeButton({ cfg, off, onDone }) {
   const ref = useRef(null);
   const [state, setState] = useState("loading");
   useEffect(() => {
-    if (!cfg?.paypal_client_id || !planId) return;
+    if (!cfg?.paypal_client_id || !off.plan_id) return;
     let dead = false;
     loadPayPalSubs(cfg.paypal_client_id).then((pp) => {
       if (dead || !ref.current) return;
       ref.current.innerHTML = "";
       pp.Buttons({
-        style: { layout: "vertical", color: "gold", shape: "rect", label: "subscribe", height: 44 },
-        createSubscription: (_d, actions) => actions.subscription.create({ plan_id: planId }),
+        style: { layout: "vertical", color: "gold", shape: "rect", label: "subscribe", height: 42 },
+        createSubscription: (_d, actions) => actions.subscription.create({ plan_id: off.plan_id }),
         onApprove: async (data) => {
-          try { onDone(await api("/api/plus/subscriptions", { method: "POST", body: { subscription_id: data.subscriptionID } })); toast("Trial started. You won't be charged for 7 days."); }
-          catch (e) { toast(e.message, true); }
+          try {
+            onDone(await api("/api/subscriptions", { method: "POST", body: { subscription_id: data.subscriptionID, offering_id: off.id } }));
+            toast(off.trial_days ? `Trial started. You won't be charged for ${off.trial_days} days.` : "Subscribed.");
+          } catch (e) { toast(e.message, true); }
         },
         onError: (e) => toast("PayPal error: " + (e?.message || e), true),
       }).render(ref.current).then(() => !dead && setState("ready")).catch(() => setState("error"));
     }).catch(() => setState("error"));
     return () => { dead = true; };
-  }, [cfg?.paypal_client_id, planId]);
-  return html`<div>${state === "loading" && html`<div class="skeleton" style="height:44px"></div>`}<div ref=${ref}></div>
+  }, [cfg?.paypal_client_id, off.plan_id]);
+  if (!off.plan_id) return html`<div class="callout warning"><${Icon} name="alert" /><div>This plan isn't available on PayPal right now.</div></div>`;
+  return html`<div>${state === "loading" && html`<div class="skeleton" style="height:42px"></div>`}<div ref=${ref}></div>
     ${state === "error" && html`<div class="callout danger"><${Icon} name="alert" /><div>The PayPal subscription button could not load.</div></div>`}</div>`;
 }
 
 const SUB_STATUS = { ACTIVE: ["Active", "success"], APPROVED: ["Approved", "accent"], SUSPENDED: ["Paused", "warning"], CANCELLED: ["Cancelled", ""], EXPIRED: ["Expired", ""] };
+const fmtDate = (ts) => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "–";
+const SubBadge = ({ sub }) => { const [l, t] = sub.in_trial ? ["Free trial", "success"] : (SUB_STATUS[sub.status] || [sub.status, ""]); return html`<span class=${"badge " + t}><span class="dot"></span>${l}</span>`; };
 
-function PlusPage({ cfg }) {
-  const [{ data, loading, error }, reload] = useFetch("/api/plus");
+function usageTiles(sub) {
+  const u = sub.usage || {};
+  if ("deliveries_received" in u) return [["Deliveries received", u.deliveries_received]];
+  return [["Payments protected", u.payments_protected], ["Money kept safe", usd(u.money_kept_safe)]];
+}
+
+function SubscriptionCard({ sub: initial, cfg, onChange }) {
+  const [sub, setSub] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [assist, setAssist] = useState(null);
-  const [view, setView] = useState(null);
-  useEffect(() => { if (data) setView(data); }, [data]);
-  const v = view || data;
-  const sub = v?.subscription;
-  useEffect(() => {  // generate the pre-charge reminder as soon as it becomes due
-    if (sub?.reminder_due && !sub.reminder && !busy) act(`/api/plus/${sub.id}/reminder`, null);
-  }, [sub?.reminder_due, sub?.reminder]);
-  if (loading && !v) return html`<${Loading} rows=${3} />`;
-  if (error && !v) return html`<${ErrorBox} error=${error} />`;
+  useEffect(() => setSub(initial), [initial]);
   async function act(path, msg, body) {
     setBusy(true);
-    try { setView(await api(path, { method: "POST", body })); if (msg) toast(msg); }
+    try { const s = await api(`/api/subscriptions/${sub.id}/${path}`, { method: "POST", body }); setSub(s); if (msg) toast(msg); onChange && onChange(); }
     catch (e) { toast(e.message, true); } finally { setBusy(false); }
   }
-  const openCancel = async () => { setAssist({ loading: true }); try { setAssist(await api(`/api/plus/${sub.id}/cancel-assist`)); } catch { setAssist({ message: "Cancelling takes one confirmation.", offer_pause: false }); } };
-  const plan = v.plan;
-  const date = (ts) => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "–";
-  const [stLabel, stTone] = SUB_STATUS[sub?.status] || [sub?.status, ""];
-  const promises = [["clock", `A reminder ${2} days before the first charge`, "With exactly when and how much, and whether you've actually used it."],
-    ["xCircle", "Cancel in one confirmation, any time", "No calls, no hidden menus. The cancel button is always on this page."],
-    ["activity", "We tell you if you're not using it", "If the benefits aren't paying off, we'll suggest cancelling."]];
+  useEffect(() => { if (sub.reminder_due && !sub.reminder && !busy) act("reminder", null); }, [sub.reminder_due, sub.reminder]);
+  const openCancel = async () => { setAssist({ loading: true }); try { setAssist(await api(`/api/subscriptions/${sub.id}/cancel-assist`)); } catch { setAssist({ message: "Cancelling takes one confirmation.", offer_pause: false }); } };
+  const off = sub.offering, live = ["ACTIVE", "APPROVED", "SUSPENDED"].includes(sub.status);
+  const tiles = [["First charge", sub.in_trial ? `${usd(sub.price)} on ${fmtDate(sub.next_billing_at)}` : `${usd(sub.price)}/mo`],
+    ["Days until charge", sub.status === "SUSPENDED" ? "Paused" : !live ? "–" : sub.days_until_charge], ...usageTiles(sub)];
+  return html`<div class="card">
+    <div class="card-head"><div><h2>${off.name}</h2><div class="sub">${off.seller ? `Sold by ${off.seller.name}` : "TrustLayer membership"} · <span class="mono">${sub.id}</span></div></div><${SubBadge} sub=${sub} /></div>
+    <div class="card-body">
+      <div class="grid cols-stats" style="gap:0;border:1px solid var(--border);border-radius:10px">
+        ${tiles.map(([l, val], i) => html`<div class="stat" key=${l} style=${{ borderLeft: i ? "1px solid var(--border)" : "0" }}><div class="l">${l}</div><div class="v" style="font-size:19px">${val}</div></div>`)}
+      </div>
+      ${sub.reminder && live && html`<div class=${"callout " + (sub.reminder.recommendation === "cancel" ? "warning" : "info")} style="margin-top:16px">
+        <${Icon} name="clock" /><div><b>${sub.reminder.headline}</b><div style="margin-top:2px">${sub.reminder.body}</div>
+          <div style="margin-top:6px;font-weight:600">${sub.reminder.fact}</div>
+          ${sub.reminder.why && html`<div class="xs" style="margin-top:4px">Our recommendation: <b>${sub.reminder.recommendation}</b>. ${sub.reminder.why}</div>`}</div></div>`}
+      ${!live && html`<div class="callout info" style="margin-top:16px"><${Icon} name="info" /><div>Cancelled on ${fmtDate(sub.cancelled_at)}. No further charges.</div></div>`}
+      ${live && (assist ? html`<div class="callout danger" style="margin-top:16px;align-items:center">
+          <${Icon} name="xCircle" /><div style="flex:1">${assist.loading ? html`<${Spinner} />` : assist.message}</div></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn danger" disabled=${busy || assist.loading} onClick=${() => { setAssist(null); act("cancel", "Cancelled. You will not be charged.", { reason: "cancelled from Subscriptions" }); }}>Cancel now</button>
+          ${assist.offer_pause && html`<button class="btn" disabled=${busy} onClick=${() => { setAssist(null); act("pause", "Paused. No charges while paused."); }}>Pause instead</button>`}
+          <button class="btn ghost" onClick=${() => setAssist(null)}>Keep subscription</button></div>`
+      : html`<div class="row" style="margin-top:16px">
+          <button class="btn" disabled=${busy} onClick=${openCancel}><${Icon} name="xCircle" />Cancel subscription</button>
+          ${sub.status === "SUSPENDED" && html`<button class="btn primary" disabled=${busy} onClick=${() => act("resume", "Resumed.")}>Resume</button>`}
+          ${busy && html`<span class="sm text-2"><${Spinner} /> Talking to PayPal</span>`}</div>`)}
+    </div>
+    ${cfg?.demo_mode !== false && sub.in_trial && live && html`<div class="card-foot row spread"><span class="xs text-2">Demo control: move this trial's clock forward${sub.simulated_days ? ` (now +${sub.simulated_days} days)` : ""}</span>
+      <button class="btn sm" disabled=${busy} onClick=${() => act("simulate", "Moved forward 5 days.", { days: 5 })}><${Icon} name="clock" size=${14} />Simulate +5 days</button></div>`}
+  </div>`;
+}
 
+function OfferingCard({ off, cfg, onSubscribed }) {
+  return html`<div class="card">
+    <div class="card-body">
+      <div class="row spread" style="align-items:flex-start"><div><div class="eyebrow">${off.seller ? off.seller.name : "TrustLayer"}</div><h2 style="font-size:18px;margin-top:4px">${off.name}</h2></div>
+        <div style="text-align:right"><div class="price">${usd(off.price)}</div><div class="xs text-2">per month${off.trial_days ? ` · ${off.trial_days}-day free trial` : ""}</div></div></div>
+      <p class="sm text-2" style="margin:10px 0 6px">${off.description}</p>
+      ${(off.benefits || []).map((b) => html`<div class="signal" key=${b}><${Icon} name="check" cls="text-2" /><span>${b}</span></div>`)}
+      <div class="xs text-2" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">${off.disclosure}</div>
+    </div>
+    <div class="card-foot"><${SubscribeButton} cfg=${cfg} off=${off} onDone=${onSubscribed} /></div></div>`;
+}
+
+function SubscriptionsPage({ cfg }) {
+  const [{ data: subs, loading }, reloadSubs] = useFetch("/api/subscriptions");
+  const [{ data: offers }, reloadOffers] = useFetch("/api/offerings");
+  const reload = () => { reloadSubs(); reloadOffers(); };
+  if (loading && !subs) return html`<${Loading} rows=${3} />`;
+  const liveIds = new Set((subs || []).filter((s) => ["ACTIVE", "APPROVED", "SUSPENDED"].includes(s.status)).map((s) => s.offering.id));
+  const available = (offers || []).filter((o) => !liveIds.has(o.id));
+  const promises = [["clock", "A reminder 2 days before the first charge", "With exactly when and how much, and whether you've actually used it."],
+    ["xCircle", "Cancel in one confirmation, any time", "No calls, no hidden menus, no fees. The cancel button is always on this page."],
+    ["activity", "We tell you if you're not using it", "If it isn't paying off, the reminder suggests cancelling."],
+    ["file", "Terms checked before launch", "Every seller's terms are reviewed for traps; the price-and-renewal disclosure is written by code."]];
   return html`
-    <${PageHead} title="TrustLayer Plus" sub="Extra protection for marketplace payments, sold the honest way: a real free trial, a reminder before the first charge, and cancellation in one confirmation." />
+    <${PageHead} title="Subscriptions" sub="Memberships from TrustLayer and from sellers, all on PayPal Subscriptions and all held to the same rules: a real free trial, an honest reminder before the first charge, and cancellation in one confirmation." />
     <div class="grid cols-main">
       <div class="stack">
-        ${!sub || ["CANCELLED", "EXPIRED"].includes(sub.status) ? html`
-          <div class="card"><div class="card-body">
-            <div class="row spread"><div><div class="eyebrow">Membership</div><h2 style="font-size:20px;margin-top:4px">${plan.name}</h2></div>
-              <div style="text-align:right"><div class="price lg">${usd(plan.price)}</div><div class="xs text-2">per month after a ${plan.trial_days}-day free trial</div></div></div>
-            <hr class="divider" />
-            ${plan.benefits.map((b) => html`<div class="signal" key=${b}><${Icon} name="check" cls="text-2" /><span>${b}</span></div>`)}
-            ${sub && html`<div class="callout info" style="margin-top:12px"><${Icon} name="info" /><div>Your previous membership was cancelled on ${date(sub.cancelled_at)}.</div></div>`}
-          </div>
-          <div class="card-foot"><${SubscribeButton} cfg=${cfg} planId=${plan.plan_id} onDone=${setView} /></div></div>`
-        : html`
-          <div class="card">
-            <div class="card-head"><div><h2>${plan.name}</h2><div class="sub mono">${sub.id}</div></div><span class=${"badge " + stTone}><span class="dot"></span>${sub.in_trial ? "Free trial" : stLabel}</span></div>
-            <div class="card-body">
-              <div class="grid cols-stats" style="gap:0;border:1px solid var(--border);border-radius:10px">
-                ${[["First charge", sub.in_trial ? `${usd(sub.price)} on ${date(sub.next_billing_at)}` : usd(sub.price) + "/mo"], ["Days until charge", sub.status === "SUSPENDED" ? "Paused" : sub.days_until_charge],
-                   ["Payments protected", sub.usage.payments_protected], ["Money kept safe", usd(sub.usage.money_kept_safe)]].map(([l, val], i) => html`
-                  <div class="stat" key=${l} style=${{ borderLeft: i ? "1px solid var(--border)" : "0" }}><div class="l">${l}</div><div class="v" style="font-size:20px">${val}</div></div>`)}
-              </div>
-              ${sub.reminder && html`<div class=${"callout " + (sub.reminder.recommendation === "cancel" ? "warning" : "info")} style="margin-top:16px">
-                <${Icon} name="clock" /><div><b>${sub.reminder.headline}</b><div style="margin-top:2px">${sub.reminder.body}</div>
-                  <div style="margin-top:6px;font-weight:600">${sub.reminder.fact}</div>
-                  ${sub.reminder.why && html`<div class="xs" style="margin-top:4px">Our recommendation: <b>${sub.reminder.recommendation}</b>. ${sub.reminder.why}</div>`}</div></div>`}
-              ${assist ? html`<div class="callout danger" style="margin-top:16px;align-items:center">
-                  <${Icon} name="xCircle" /><div style="flex:1">${assist.loading ? html`<${Spinner} />` : assist.message}</div></div>
-                <div class="row" style="margin-top:10px">
-                  <button class="btn danger" disabled=${busy || assist.loading} onClick=${() => { setAssist(null); act(`/api/plus/${sub.id}/cancel`, "Cancelled. You will not be charged.", { reason: "cancelled from the Plus page" }); }}>Cancel now</button>
-                  ${assist.offer_pause && html`<button class="btn" disabled=${busy} onClick=${() => { setAssist(null); act(`/api/plus/${sub.id}/pause`, "Paused. No charges while paused."); }}>Pause instead</button>`}
-                  <button class="btn ghost" onClick=${() => setAssist(null)}>Keep membership</button></div>`
-              : html`<div class="row" style="margin-top:16px">
-                  <button class="btn" disabled=${busy} onClick=${openCancel}><${Icon} name="xCircle" />Cancel subscription</button>
-                  ${sub.status === "SUSPENDED" && html`<button class="btn primary" disabled=${busy} onClick=${() => act(`/api/plus/${sub.id}/resume`, "Resumed.")}>Resume</button>`}
-                  ${busy && html`<span class="sm text-2"><${Spinner} /> Talking to PayPal</span>`}</div>`}
-            </div>
-            ${cfg?.demo_mode !== false && sub.in_trial && html`<div class="card-foot row spread"><span class="xs text-2">Demo control: move this trial's clock forward${sub.simulated_days ? ` (now +${sub.simulated_days} days)` : ""}</span>
-              <button class="btn sm" disabled=${busy} onClick=${() => act(`/api/plus/${sub.id}/simulate`, "Moved forward 5 days.", { days: 5 })}><${Icon} name="clock" size=${14} />Simulate +5 days</button></div>`}
-          </div>`}
+        ${(subs || []).length > 0 && html`<h2>Your subscriptions</h2>${subs.map((s) => html`<${SubscriptionCard} key=${s.id} sub=${s} cfg=${cfg} onChange=${reload} />`)}`}
+        ${available.length > 0 && html`<h2 style="margin-top:8px">Available</h2>
+          <div class="grid cols-2">${available.map((o) => html`<${OfferingCard} key=${o.id} off=${o} cfg=${cfg} onSubscribed=${reload} />`)}</div>`}
       </div>
       <div class="stack sticky">
-        <div class="card"><div class="card-head"><h2>Our promises</h2></div><div class="card-body">
+        <div class="card"><div class="card-head"><h2>Our rules for every subscription</h2></div><div class="card-body">
           ${promises.map(([icon, t, d]) => html`<div class="finding" key=${t}><span class="ic accent" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none"><${Icon} name=${icon} size=${14} /></span>
             <div><div style="font-weight:500">${t}</div><div class="sm text-2">${d}</div></div></div>`)}
         </div></div>
-        <div class="card"><div class="card-body"><div class="xs text-2">About 7 in 10 US adults have been charged after forgetting a free trial (2026 surveys), and 20+ US states now require click-to-cancel. Plus is built to the opposite standard. Billing runs on PayPal Subscriptions; status is verified with PayPal and kept in sync by webhooks.</div></div></div>
+        <div class="card"><div class="card-body"><div class="xs text-2">About 7 in 10 US adults have been charged after forgetting a free trial (2026 surveys), and 20+ US states now require click-to-cancel. Forgotten-trial charges often come back as chargebacks, which hurts sellers too.</div></div></div>
       </div>
     </div>`;
+}
+
+function SellerSubscriptions({ id, onChange }) {
+  const [{ data }, reload] = useFetch(`/api/sellers/${id}/subscribers`);
+  const [form, setForm] = useState({ name: "", description: "", price: "9.99", trial_days: "7" });
+  const [review, setReview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  if (!data) return null;
+  const body = () => ({ name: form.name.trim(), description: form.description.trim(), price: Number(form.price), trial_days: Number(form.trial_days) });
+  const valid = form.name.trim().length >= 3 && form.description.trim().length >= 10 && Number(form.price) > 0;
+  const doReview = async () => { setBusy(true); try { setReview(await api(`/api/sellers/${id}/offerings/review`, { method: "POST", body: body() })); } catch (e) { toast(e.message, true); } finally { setBusy(false); } };
+  const publish = async () => {
+    setBusy(true);
+    try { await api(`/api/sellers/${id}/offerings`, { method: "POST", body: body() }); toast("Published on PayPal Subscriptions."); setOpen(false); setReview(null); setForm({ ...form, name: "", description: "" }); reload(); onChange && onChange(); }
+    catch (e) { toast(e.message, true); } finally { setBusy(false); }
+  };
+  const record = async (sid) => { try { await api(`/api/subscriptions/${sid}/delivery`, { method: "POST" }); toast("Delivery recorded."); reload(); onChange && onChange(); } catch (e) { toast(e.message, true); } };
+  const set = (k) => (e) => { setForm({ ...form, [k]: e.target.value }); setReview(null); };
+  const s = data.summary;
+  return html`<div class="card">
+    <div class="card-head"><div><h2>Subscriptions kit</h2><div class="sub">Sell memberships on PayPal Subscriptions without the traps that turn into chargebacks</div></div>
+      ${s.at_risk > 0 ? html`<span class="badge warning">${s.at_risk} at risk</span>` : html`<span class="badge">${s.active} active</span>`}</div>
+    <div class="section">
+      <div class="grid cols-stats" style="gap:0;border:1px solid var(--border);border-radius:10px">
+        ${[["Active subscribers", s.active], ["In free trial", s.in_trial], ["Monthly revenue", usd(s.monthly_revenue)], ["Forgotten-trial risk", s.at_risk]].map(([l, v], i) => html`
+          <div class="stat" key=${l} style=${{ borderLeft: i ? "1px solid var(--border)" : "0" }}><div class="l">${l}</div><div class="v" style=${{ fontSize: "19px", color: l === "Forgotten-trial risk" && v > 0 ? "var(--warning)" : "inherit" }}>${v}</div></div>`)}
+      </div>
+    </div>
+    <div class="section">
+      <div class="row spread"><h3 style="margin:0">Your offerings</h3>${!open && html`<button class="btn sm" onClick=${() => setOpen(true)}><${Icon} name="sparkles" size=${14} />New offering</button>`}</div>
+      ${data.offerings.length === 0 && !open && html`<div class="sm text-2" style="margin-top:6px">No subscription offerings yet.</div>`}
+      ${data.offerings.map((o) => html`<div class="row spread" key=${o.id} style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div><div class="cell-main">${o.name}</div><div class="cell-sub">${o.disclosure}</div></div><span class="mono xs text-3">${o.plan_id || ""}</span></div>`)}
+      ${open && html`<div class="stack" style="gap:10px;margin-top:12px">
+        <div><label class="field">Name</label><input class="input" value=${form.name} onChange=${set("name")} placeholder="e.g. Film Roll Club" /></div>
+        <div><label class="field">What subscribers get</label><textarea class="input" style="height:76px;padding-top:8px;resize:vertical" value=${form.description} onChange=${set("description")} placeholder="Describe the offer in your own words"></textarea></div>
+        <div class="grid cols-2" style="gap:10px"><div><label class="field">Price per month (USD)</label><input class="input" type="number" min="1" step="0.01" value=${form.price} onChange=${set("price")} /></div>
+          <div><label class="field">Free trial (days)</label><input class="input" type="number" min="0" max="30" value=${form.trial_days} onChange=${set("trial_days")} /></div></div>
+        ${review && html`<div class="stack" style="gap:8px">
+          ${review.blocking.map((b) => html`<div class="callout danger" key=${b}><${Icon} name="xCircle" /><div><b>Not allowed:</b> ${b}</div></div>`)}
+          ${review.issues.map((i, k) => html`<div class="signal" key=${k}><span class=${"sev " + (i.severity === "high" ? "high" : "med")}>${i.severity}</span><span><b>${i.problem}.</b> ${i.fix}</span></div>`)}
+          ${review.improved_description && review.improved_description !== form.description && html`<div class="callout info"><${Icon} name="sparkles" /><div style="flex:1"><b>Clearer wording:</b> ${review.improved_description}
+            <div><button class="btn sm" style="margin-top:8px" onClick=${() => setForm({ ...form, description: review.improved_description })}>Use this wording</button></div></div></div>`}
+          <div class="callout success"><${Icon} name="file" /><div><b>Shown to every subscriber (written by TrustLayer, not editable):</b> ${review.disclosure}</div></div>
+          ${review.model && html`<div class="model-line"><${Icon} name="sparkles" size=${12} />Terms reviewed by ${review.model}</div>`}</div>`}
+        <div class="row">
+          <button class="btn" disabled=${busy || !valid} onClick=${doReview}>${busy && !review ? html`<${Spinner} />` : html`<${Icon} name="shieldCheck" size=${14} />`} Review terms</button>
+          <button class="btn primary" disabled=${busy || !review || review.blocking.length > 0} onClick=${publish}>Publish on PayPal</button>
+          <button class="btn ghost" onClick=${() => { setOpen(false); setReview(null); }}>Cancel</button></div>
+      </div>`}
+    </div>
+    ${data.subscribers.length > 0 && html`<div class="table-wrap"><table class="table">
+      <thead><tr><th>Subscriber</th><th>Plan</th><th>Status</th><th style="text-align:right">Charge in</th><th style="text-align:right">Deliveries</th><th></th></tr></thead>
+      <tbody>${data.subscribers.map((sb) => html`<tr key=${sb.id}>
+        <td class="mono">${sb.id}</td><td>${sb.offering.name}</td><td><div class="row"><${SubBadge} sub=${sb} />${sb.chargeback_risk && html`<span class="badge warning">Unused, charge soon</span>`}</div></td>
+        <td class="num" style="text-align:right">${["ACTIVE", "APPROVED"].includes(sb.status) ? `${sb.days_until_charge} d` : "–"}</td>
+        <td class="num" style="text-align:right">${sb.usage.deliveries_received ?? "–"}</td>
+        <td>${["ACTIVE", "APPROVED"].includes(sb.status) && html`<button class="btn sm" onClick=${() => record(sb.id)}>Record delivery</button>`}</td></tr>`)}</tbody></table></div>`}
+  </div>`;
 }
 
 // ---------------- audit log ----------------

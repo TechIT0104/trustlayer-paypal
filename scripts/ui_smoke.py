@@ -22,7 +22,7 @@ for _ in range(40):
 orders = json.load(urllib.request.urlopen(BASE + "/api/orders"))
 pages = [("market", "#/", None), ("listing_clear", "#/listing/L1", "check"), ("listing_scam", "#/listing/L2", "check"),
          ("sellers", "#/sellers", None), ("seller_gadgethub", "#/sellers/gadgethub", None),
-         ("orders", "#/orders", None), ("plus", "#/plus", None), ("ledger", "#/ledger", None)]
+         ("orders", "#/orders", None), ("subscriptions", "#/subscriptions", None), ("seller_maya_kit", "#/sellers/maya", None), ("ledger", "#/ledger", None)]
 for o in orders[:2]:
     pages.append((f"order_{o['status'].lower()}", f"#/order/{o['id']}", None))
 

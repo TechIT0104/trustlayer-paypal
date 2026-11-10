@@ -78,6 +78,16 @@ def metrics(seller_id: str) -> dict:
         findings.append({"level": "high",
                          "title": f"{paused} listing{'s' if paused > 1 else ''} had buyer payments paused as likely scams",
                          "detail": "Chats on these listings pushed buyers toward unprotected or off-platform payment."})
+    from . import subscriptions  # local import: subscriptions imports orders, which imports this module's peers
+    subs = [subscriptions.view_sub(s) for s in db.all(
+        "SELECT * FROM subscriptions WHERE seller_id = ? AND status IN ('ACTIVE','APPROVED')", (seller_id,))]
+    at_risk = [s for s in subs if s["chargeback_risk"]]
+    if at_risk:
+        score -= 5
+        findings.append({"level": "medium",
+                         "title": f"{len(at_risk)} trial subscriber{'s' if len(at_risk) > 1 else ''} about to be charged without using it",
+                         "detail": "Forgotten-trial charges are a common source of chargebacks. TrustLayer sends them an honest "
+                                   "reminder; record a delivery if they did receive something."})
     if caps:
         findings.append({"level": "info", "title": f"{protected}/{len(caps)} recent sales covered by PayPal Seller Protection",
                          "detail": "Seller Protection (item-not-received, unauthorized) requires tracking to the buyer's address."})

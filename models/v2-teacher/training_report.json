@@ -1,0 +1,34 @@
+{
+  "role": "teacher",
+  "base_model": "BothBosu/distilbert-scam-classifier-v1.3",
+  "teacher": null,
+  "args": {
+    "role": "teacher",
+    "base": "BothBosu/distilbert-scam-classifier-v1.3",
+    "teacher": "v2-teacher",
+    "tag": "v2-teacher",
+    "epochs": 5,
+    "lr": 3e-05,
+    "batch": 16,
+    "max_length": 384,
+    "phone_ratio": 0.35,
+    "tactic_weight": 0.5,
+    "alpha": 0.5,
+    "temperature": 2.0,
+    "export": true,
+    "seed": 13
+  },
+  "dev_marketplace": {
+    "roc_auc": 0.953,
+    "pr_auc": 0.973,
+    "tactic_accuracy": 0.429
+  },
+  "phone_test": {
+    "roc_auc": 1.0,
+    "pr_auc": 1.0
+  },
+  "params_millions": 66.4,
+  "train_seconds": 866,
+  "n_train_marketplace": 386,
+  "onnx_int8_mb": 66.8
+}

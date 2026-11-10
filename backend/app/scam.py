@@ -164,6 +164,7 @@ MODEL_CONFIDENT = 0.9   # local-model probability treated as "confident" (set on
 MODEL_ONLY_WEIGHT = 0.8  # without the LLM, the model's probability is discounted: it cannot cite evidence
 MODEL_CAUTION_BAND = 0.75  # below its threshold, the model can at most raise a caution, and only above this
 LLM_CLEAR_AT = 0.15       # LLM risk at or below this, with no cited evidence, counts as "the LLM read it as safe"
+TACTIC_PREFERENCE = "model"  # which tactic source wins when both are confident; chosen on the dev set (53% vs 49%)
 
 
 def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused") -> dict:
@@ -231,10 +232,24 @@ def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused
     else:
         verdict = "CLEAR"
 
+    # Which tactic to show: the LLM's when it is confident, otherwise the local model's tactic head (v2 models).
+    tactic = None
+    llm_tac = (ai or {}).get("scam_type")
+    model_tac = (local or {}).get("tactic")
+    llm_ok = llm_tac not in (None, "none", "too_good_to_be_true") and (ai or {}).get("risk", 0) >= 0.5
+    model_ok = model_tac not in (None, "none") and m is not None and m >= m_thr
+    if TACTIC_PREFERENCE == "model" and model_ok:
+        tactic = {"name": model_tac, "source": "local model", "p": local.get("tactic_p")}
+    elif llm_ok:
+        tactic = {"name": llm_tac, "source": "llm"}
+    elif model_ok:
+        tactic = {"name": model_tac, "source": "local model", "p": local.get("tactic_p")}
+
     reasons = [h["label"] for h in sorted(rules, key=lambda h: -h["weight"])]
     return {
         "verdict": verdict, "score": round(score, 3), "rule_score": round(rule_score, 3),
         "signals": rules, "reasons": reasons, "ai": ai, "ai_error": ai_error, "mode": mode, "local_model": local,
+        "tactic": tactic,
         "thresholds": {"pause": PAUSE_AT, "caution": CAUTION_AT},
         "elapsed_ms": int((time.time() - t0) * 1000),
     }

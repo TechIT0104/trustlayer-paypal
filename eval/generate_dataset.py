@@ -24,15 +24,25 @@ from backend.app import config  # noqa: E402
 #   dev   -> eval/data/chats.jsonl        (qwen; used while developing the rules/fusion)
 #   test  -> eval/data/test_chats.jsonl   (qwen; held out, generated after all changes, only ever scored)
 #   train -> eval/data/train_chats.jsonl  (gpt-oss-20b; training data for the fine-tuned local model)
+#   train_hard -> eval/data/train_hard_chats.jsonl (gpt-oss-20b; extra hard honest chats + more scams per tactic)
+#   test2 -> eval/data/test2_chats.jsonl  (qwen; a second held-out set, generated before the v2 model and never
+#            looked at until it is scored once)
 PER_SPEC = int(sys.argv[1]) if len(sys.argv) > 1 else 5
 SPLIT = sys.argv[2] if len(sys.argv) > 2 else "dev"
-GEN_MODEL = sys.argv[3] if len(sys.argv) > 3 else ("openai/gpt-oss-20b" if SPLIT == "train" else "qwen/qwen3.8-27b")
-OUT = pathlib.Path(__file__).resolve().parent / "data" / {"test": "test_chats.jsonl", "train": "train_chats.jsonl"}.get(SPLIT, "chats.jsonl")
-PREFIX = {"test": "T", "train": "R"}.get(SPLIT, "")
+GEN_MODEL = sys.argv[3] if len(sys.argv) > 3 else ("openai/gpt-oss-20b" if SPLIT.startswith("train") else "qwen/qwen3.8-27b")
+OUT = pathlib.Path(__file__).resolve().parent / "data" / {
+    "test": "test_chats.jsonl", "train": "train_chats.jsonl", "train_hard": "train_hard_chats.jsonl",
+    "test2": "test2_chats.jsonl"}.get(SPLIT, "chats.jsonl")
+PREFIX = {"test": "T", "train": "R", "train_hard": "H", "test2": "V"}.get(SPLIT, "")
 EXTRA = {"test": "\nThis is a held-out test set: use different items, names, prices and phrasing than the most typical "
                  "examples; vary how directly the tactic is stated.",
+         "test2": "\nThis is a second held-out test set. Use unusual item categories (services, tickets, pets, car parts, "
+                  "rentals, collectibles), new names and fresh phrasing; vary how directly the tactic is stated.",
          "train": "\nVary the item category, price range, tone and message length a lot across examples; some sellers "
-                  "are terse, some chatty; include typos in some."}.get(SPLIT, "")
+                  "are terse, some chatty; include typos in some.",
+         "train_hard": "\nMake these deliberately hard to classify: honest chats that superficially look risky, and scams "
+                       "that sound polite and reasonable. Vary items, prices, tone and length; include typos in some."
+         }.get(SPLIT, "")
 REASONING = "low" if "gpt-oss" in GEN_MODEL else "none"
 
 SPECS = [
@@ -57,6 +67,24 @@ SPECS = [
     ("legit", "buyer_asks_ff_refused", "Buyer offers to pay Friends & Family to save fees; seller politely refuses and asks for the normal checkout."),
     ("legit", "hard_haggle", "Tough haggling, seller discloses defects honestly, firm on price, uses checkout."),
     ("legit", "gift_purchase", "Buyer is buying the item as a gift; seller offers a gift note or gift wrap; the word 'gift' appears naturally."),
+]
+
+# Hard examples for the v2 local model: the honest patterns that fooled v1, plus polite scams of every tactic.
+HARD_SPECS = [
+    ("legit", "honest_urgency", "Honest seller under real time pressure (moving tomorrow, flight tonight, several buyers asking), says 'first to pay through checkout gets it', never suggests unsafe payment."),
+    ("legit", "honest_low_price", "Established seller selling far below market for a believable reason (estate sale, divorce, upgrade, damaged box) and insisting on the marketplace checkout."),
+    ("legit", "warns_against_ff", "Seller warns the buyer about Friends & Family scams and explains why the protected checkout is better; mentions 'friends and family' or 'gift' explicitly."),
+    ("legit", "buyer_asks_ff_refused", "Buyer pushes to pay via Zelle, Cash App or Friends & Family to save fees; seller firmly refuses and asks for checkout."),
+    ("legit", "mentions_fees_honestly", "Honest talk about shipping insurance, deposits for a custom order made by a long-established seller through checkout, or courier pickup fees included in the price."),
+    ("legit", "local_pickup", "Local meetup with phone numbers and addresses exchanged for logistics; payment through the checkout before or at pickup."),
+    ("legit", "honest_new_seller", "A new account with zero sales, selling a household item at a slightly low price, chatty and nervous, uses checkout."),
+    ("legit", "checkout_link_in_app", "Seller says they sent the official marketplace checkout or invoice through the app's own button; nothing off-platform."),
+    ("scam", "protection_bypass_subtle", "Polite, friendly seller who casually suggests the 'personal' or 'family' payment option as a favour to save fees."),
+    ("scam", "advance_fee", "Courteous seller abroad who needs a small refundable courier, customs or insurance fee first, with a plausible story."),
+    ("scam", "payee_switch", "Seller asks to send payment to their spouse's or business partner's PayPal for 'accounting reasons', sounding professional."),
+    ("scam", "phishing_link", "Seller sends a professional-looking secure payment link on a look-alike domain and explains it is 'faster than the app'."),
+    ("scam", "impersonation", "Messages that pretend to be from PayPal or the marketplace's 'trust team' asking the buyer to pay a verification or upgrade fee."),
+    ("scam", "off_platform_giftcard_crypto", "Seller offers a discount for paying in USDT, BTC or gift cards, framed as a modern, efficient option."),
 ]
 
 SYSTEM = """You write realistic test data for a fraud-detection system on a US peer-to-peer marketplace that
@@ -131,7 +159,8 @@ def main() -> None:
         have[e["type"]] = have.get(e["type"], 0) + 1
     k = len(existing)
     rounds = int(sys.argv[4]) if len(sys.argv) > 4 else 1  # batches of PER_SPEC per scenario
-    jobs = [(label, typ, ins, r) for r in range(rounds) for label, typ, ins in SPECS]
+    specs = HARD_SPECS if SPLIT == "train_hard" else SPECS
+    jobs = [(label, typ, ins, r) for r in range(rounds) for label, typ, ins in specs]
     for label, typ, instruction, rnd in jobs:
         if have.get(typ, 0) >= PER_SPEC * (rnd + 1) - 1:
             print(f"skip  {typ:28s} round {rnd} (have {have.get(typ, 0)})")

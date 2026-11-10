@@ -1,4 +1,8 @@
-"""Write NUMBERS.md and the README evaluation section from eval/results/{test,dev}/ and the model report.
+"""Write NUMBERS.md and the README evaluation section from eval/results/* and models/*.
+
+Headline: held-out test set v2 (eval/results/test2), scored once with the final configuration.
+Also reported, clearly labelled: test set v1 (first held-out set, seen after its first scoring), the dev set,
+and the local-model comparison (v1, v2 teacher, distilled students).
 
 Usage: .venv/Scripts/python eval/report.py
 """
@@ -13,19 +17,16 @@ def load(split: str):
     d = ROOT / "eval" / "results" / split
     if not (d / "summary.json").exists():
         return None, []
-    s = json.loads((d / "summary.json").read_text())
-    per = [json.loads(l) for l in (d / "per_example.jsonl").read_text().splitlines()]
-    return s, per
+    return json.loads((d / "summary.json").read_text()), [json.loads(l) for l in (d / "per_example.jsonl").read_text().splitlines()]
 
 
 def pct(x) -> str:
     if x is None:
         return "–"
-    s = f"{100 * x:.1f}".rstrip("0").rstrip(".")  # 97.5% stays 97.5%, 100.0% becomes 100%
-    return s + "%"
+    return f"{100 * x:.1f}".rstrip("0").rstrip(".") + "%"
 
 
-def row(name: str, m: dict | None) -> str:
+def row(name, m):
     if not m:
         return ""
     return (f"| {name} | {pct(m['recall'])} ({m['tp']}/{m['tp'] + m['fn']}) | {pct(m['precision'])} | "
@@ -37,127 +38,139 @@ HEAD = ("| Detector | Scams paused (recall) | Precision | Honest buyers wrongly 
         "| Scams with no warning at all | F1 |\n|---|---|---|---|---|---|---|\n")
 
 
-def table(s: dict) -> str:
+def table(s):
     return (HEAD + row("Rules only", s["rules"]) + row("LLM only (grounded quotes)", s["llm"])
-            + row("Local fine-tuned model only", s.get("model")) + row("Rules + local model (LLM outage mode)", s.get("fused_no_llm"))
+            + row("Local fine-tuned model only", s.get("model"))
+            + row("Rules + local model (LLM outage mode)", s.get("fused_no_llm"))
             + row("**TrustLayer (rules + LLM + local model)**", s["fused"]))
 
 
-test, test_per = load("test")
-dev, _ = load("dev")
-model_report = ROOT / "models" / "scam-distilbert" / "training_report.json"
-mr = json.loads(model_report.read_text()) if model_report.exists() else None
-if not test:
-    raise SystemExit("no eval/results/test/summary.json yet")
+def tactic_line(s):
+    parts = [f"LLM {pct(s.get('tactic_accuracy_on_scams'))}"]
+    if s.get("tactic_accuracy_local_model") is not None:
+        parts.append(f"local model {pct(s['tactic_accuracy_local_model'])}")
+    if s.get("tactic_accuracy_shown") is not None:
+        parts.append(f"**shown to the buyer {pct(s['tactic_accuracy_shown'])}**")
+    return " · ".join(parts)
 
-lat = test["llm_latency_ms"]
-misses = [p for p in test_per if (p["fused"] == "PAUSE") != (p["label"] == "scam")]
-# Human analysis of each test error, written after scoring. The engine was NOT changed in response (test stays clean).
-TEST_NOTES = {
-    "Ts003": "The seller proposes the 'Send Money' personal option to skip fees; the buyer refuses and pays through "
-             "checkout. The LLM quoted the right line but scored it 0.2 (the buyer declined), and when the LLM cites "
-             "evidence the fusion trusts its score over the local model (p=0.95). No regex matched this wording. "
-             "Arguably no money was at risk, but a CAUTION would be better. Candidate fix, to be tuned on dev only: let a "
-             "confident local model lift a grounded-but-low LLM score to CAUTION.",
-    "Tl048": "An honest seller in a hurry; the LLM read the pressure as a scam tactic and grounded it in a real quote. "
-             "This is the documented failure mode of LLM scam detectors (urgency language); the cooling-off design "
-             "limits the cost: the buyer can still pay, with a short hold.",
+
+def misses_md(per, notes):
+    ms = [p for p in per if (p["fused"] == "PAUSE") != (p["label"] == "scam")]
+    return "\n".join(
+        f"- `{p['id']}` {p['label']} / {p['type']}: fused={p['fused']} (rules={p['rules']}, llm={p['llm']}, "
+        f"model p={p.get('p_model')}, tactic shown={p.get('final_tactic')}, rule signals={', '.join(p['rule_keys']) or 'none'})"
+        + (f"\n  - *Analysis:* {notes[p['id']]}" if p["id"] in notes else "") for p in ms) or "- none"
+
+
+# Human analysis of errors, written after scoring. The engine was NOT changed in response.
+NOTES = {
+    "Ts003": "Seller proposes the 'Send Money' personal option; the buyer refuses and uses checkout. The LLM quoted the "
+             "line but scored it 0.2, and a grounded LLM score currently outranks the local model (p=0.95).",
+    "Tl048": "Honest seller in a hurry; the LLM read urgency as a tactic (the documented failure mode of LLM scam detectors).",
 }
-miss_lines = "\n".join(
-    f"- `{p['id']}` {p['label']} / {p['type']}: fused={p['fused']} (rules={p['rules']}, llm={p['llm']}, "
-    f"model p={p.get('p_model')}, ai tactic={p['ai_type']}, rule signals={', '.join(p['rule_keys']) or 'none'})"
-    + (f"\n  - *Analysis:* {TEST_NOTES[p['id']]}" if p["id"] in TEST_NOTES else "")
-    for p in misses) or "- none"
-dev_noise = """
-### Dev-set errors: mostly label noise from the generator
-Three of the four dev errors are chats the generator *labelled* honest but whose text is genuinely risky: the seller
-sends their own "checkout link" (l059, l064), or asks for payment before a local-pickup inspection (l062). One "scam"
-(s040) contains no scam at all. We report the numbers as they are rather than relabel.
+
+t2, t2_per = load("test2")
+t1, t1_per = load("test")
+t1b, _ = load("test_v1_v2model")
+dev, _ = load("dev")
+comp = json.loads((ROOT / "models/model_comparison.json").read_text()) if (ROOT / "models/model_comparison.json").exists() else None
+if not t2:
+    raise SystemExit("no eval/results/test2/summary.json yet")
+
+per_type = "\n".join(f"| {t} | {v} |" for t, v in t2["per_type_fused_recall_or_specificity"].items())
+lat = t2["llm_latency_ms"]
+
+comp_md = ""
+if comp:
+    rows = "\n".join(
+        f"| {'**' if c['name'] == comp['chosen'] else ''}{c['name']}{'** (deployed)' if c['name'] == comp['chosen'] else ''} | "
+        f"{c['base_model']} | {c['size_mb']} MB | {c['dev_roc_auc']} | {c['threshold']} | {pct(c['dev_recall_at_thr'])} | "
+        f"{c['dev_fp']} | {pct(c['dev_tactic_accuracy']) if c['dev_tactic_accuracy'] is not None else 'n/a'} | "
+        f"{c['cpu_latency_ms_p50']} ms |" for c in comp["candidates"])
+    comp_md = f"""
+## The local models (all measured as int8 ONNX on CPU, on the dev set)
+| Model | Starting point | Size | ROC-AUC | Threshold | Recall at threshold | False positives (of 34) | Tactic accuracy | CPU latency p50 |
+|---|---|---|---|---|---|---|---|---|
+{rows}
+
+- **v1** (`scam-distilbert`): the public `BothBosu/distilbert-scam-classifier-v1.3` fine-tuned on 281 marketplace chats.
+  Out of the box the public model flagged 59% of honest dev chats; after fine-tuning, 0% at the v1 GPU threshold.
+- **v2 teacher**: same base, fine-tuned with two heads (scam / tactic) on 281 + 105 *hard* chats (honest patterns that
+  fooled v1, polite scams). In LLM-outage mode it cut the share of honest dev chats shown a warning from 38% to 23.5%.
+- **v2 students**: MiniLM-L6 / L12 distilled from the teacher (soft targets + labels). They kept, even improved, scam
+  ranking at a fraction of the size and latency, but **lost most of the tactic skill**.
+- Deployment rule fixed before comparing: {comp['rule']}. Result: **{comp['chosen']}**. The L12 student is the best pure
+  scam detector and can be served instead with `LOCAL_MODEL=v2-student-l12`.
+- Thresholds are calibrated on each int8 model's own dev outputs (highest recall at precision ≥ 95%). The tactic
+  preference (local model first, then LLM) was chosen on dev: 53% vs 49%, a 2-example difference, so treat it as small.
 """
-per_type = "\n".join(f"| {t} | {v} |" for t, v in test["per_type_fused_recall_or_specificity"].items())
 
-model_md = ""
-ab_path = ROOT / "models" / "ablation-plain-distilbert" / "training_report.json"
-ablation_md = ""
-if ab_path.exists():
-    ab = json.loads(ab_path.read_text())["fine_tuned"]["dev_marketplace"]
-    ablation_md = (f"\n**Ablation: does starting from the public scam model help?** Same data and settings, starting from plain "
-                   f"`distilbert-base-uncased`: dev ROC-AUC {ab['roc_auc']}, PR-AUC {ab['pr_auc']}, precision {pct(ab['precision'])}, "
-                   f"recall {pct(ab['recall'])} at its own dev-chosen threshold.\n")
-if mr:
-    z, f = mr["zero_shot"]["dev_marketplace"], mr["fine_tuned"]["dev_marketplace"]
-    zp, fp_ = mr["zero_shot"]["phone_test"], mr["fine_tuned"]["phone_test"]
-    model_md = f"""
-## The local fine-tuned model
-Base: `{mr['base_model']}` (public, Apache-2.0: DistilBERT trained on LLM-generated scam phone calls).
-Fine-tuned on marketplace payment chats (`eval/data/train_chats.jsonl`, generated by `gpt-oss-20b`) mixed with
-`BothBosu/scam-dialogue` phone dialogues (Apache-2.0), {mr['args']['epochs']} epochs on a GTX 1650 ({mr['train_seconds']} s).
-Exported to ONNX and int8-quantized; runs on CPU in the API. Decision threshold {mr['threshold']:.2f} chosen on the dev set
-(highest recall at precision of at least 95%).
+short = f"""Held-out **test set v2: {t2['n']} marketplace chats** ({t2['n_scam']} scams, {t2['n_legit']} honest; new item
+categories and wording), generated before the final model was chosen and scored exactly once with the final configuration.
 
-| Model on the **dev** marketplace set | ROC-AUC | PR-AUC | Precision | Recall | False-positive rate |
-|---|---|---|---|---|---|
-| Public model, zero-shot (threshold 0.5) | {z['roc_auc']} | {z['pr_auc']} | {pct(z['precision'])} | {pct(z['recall'])} | {pct(z['false_positive_rate'])} |
-| After fine-tuning | {f['roc_auc']} | {f['pr_auc']} | {pct(f['precision'])} | {pct(f['recall'])} | {pct(f['false_positive_rate'])} |
-
-Phone-scam test split (the base model's original task): ROC-AUC {zp['roc_auc']} before → {fp_['roc_auc']} after, so
-fine-tuning did not erase what it knew. The base model's perfect zero-shot phone score suggests it saw that split in
-training, so this is only a "did it forget?" check, not a fair benchmark. The dev set chose the best epoch and the threshold,
-so dev numbers here are optimistic; the held-out test table above is the honest one.
-{ablation_md}"""
-
-short = f"""Held-out **test set: {test['n']} marketplace chats** ({test['n_scam']} scams across 10 tactics, {test['n_legit']} honest,
-including traps such as sellers warning *against* Friends & Family), generated only after every rule, prompt and model
-change was final. Nothing was tuned on it.
-
-{table(test)}
-- Scam **tactic named correctly** on {pct(test['tactic_accuracy_on_scams'])} of scams · LLM p50 {lat['p50']} ms / p95 {lat['p95']} ms
-- {test['ungrounded_quotes_dropped']} AI-cited quotes were not in the chat and were discarded by the grounding check
-- Method, the dev-set numbers, every miss, and the fine-tuned model's results: [NUMBERS.md](NUMBERS.md)"""
+{table(t2)}
+- Tactic named correctly on scams: {tactic_line(t2)}
+- LLM p50 {lat['p50']} ms / p95 {lat['p95']} ms · local model about 80 ms on a laptop CPU
+- The first held-out set, the dev set, every error, and the local-model comparison: [NUMBERS.md](NUMBERS.md)"""
 
 numbers = f"""# NUMBERS: Pay-pause evaluation
 
-Measured, not claimed. Reproduce: `python eval/run_eval.py eval/data/test_chats.jsonl eval/results/test`, then
-`python eval/report.py`. LLM answers are cached in `eval/results/llm_cache.json` so re-scoring is deterministic.
+Measured, not claimed. Reproduce any table with `python eval/run_eval.py <dataset> <results_dir>` then
+`python eval/report.py`. LLM answers are cached in `eval/results/llm_cache.json`, so re-scoring is deterministic.
 
 ## Method
-- **Three disjoint datasets, three different generator models.** Labels always come from the scenario that produced
-  the chat, never from a classifier.
-  - `eval/data/train_chats.jsonl`: training data for the local model (generator `openai/gpt-oss-20b`).
-  - `eval/data/chats.jsonl` (**dev**): used while developing the rules and fusion, and for the model's threshold
-    (generator `qwen/qwen3.8-27b`). We changed the engine after looking at it, so its numbers are optimistic.
-  - `eval/data/test_chats.jsonl` (**held-out test**): generated after all changes (same 20 scenarios, instructed to use
-    different items and phrasing), and only ever scored.
-- Classifier LLM: `{test['classifier_model']}` on Groq, temperature 0, with no fallback provider during measurement.
+- **Disjoint datasets from different generator models.** Labels always come from the scenario that produced the chat.
+  - Training: `eval/data/train_chats.jsonl` (281) and `train_hard_chats.jsonl` (105), generator `openai/gpt-oss-20b`.
+  - Dev: `eval/data/chats.jsonl` (83, `qwen/qwen3.8-27b`). Used to develop rules and fusion, pick model epochs and
+    thresholds, choose the deployed model and the tactic preference. Its numbers are optimistic.
+  - Test v1: `eval/data/test_chats.jsonl` (80, qwen). Held out for the first engine; after we looked at its results
+    it counts as **seen**, so it is reported only for comparison.
+  - **Test v2**: `eval/data/test2_chats.jsonl` (80, qwen, new categories and phrasing). Generated before the v2 models were
+    compared, never inspected, and scored **once** with the final configuration. This is the headline.
+- Classifier LLM: `{t2['classifier_model']}` on Groq, temperature 0, no fallback provider during measurement.
 - Positive class = scam. **PAUSE** = money held + cooling-off. CAUTION = a warning without holding money.
 
-## Held-out test set ({test['n']} chats: {test['n_scam']} scam / {test['n_legit']} legit)
-{table(test)}
-Tactic accuracy on scams: **{pct(test['tactic_accuracy_on_scams'])}** · ungrounded AI quotes discarded: **{test['ungrounded_quotes_dropped']}** ·
-LLM latency p50 **{lat['p50']} ms**, p95 **{lat['p95']} ms**.
+## Headline: held-out test set v2 ({t2['n']} chats)
+{table(t2)}
+Tactic named correctly on scams: {tactic_line(t2)} · ungrounded AI quotes discarded: {t2['ungrounded_quotes_dropped']} ·
+LLM latency p50 {lat['p50']} ms, p95 {lat['p95']} ms. Local model: `{t2['local_model'].get('name')}`.
 
 ### Per scenario (fused: scams paused / honest chats not paused)
 | Scenario | Correct |
 |---|---|
 {per_type}
 
-### Every fused error on the test set
-{miss_lines}
+### Every fused error on test v2
+{misses_md(t2_per, NOTES)}
+{"" if not t1 else f'''
+## Test set v1 (seen; for comparison)
+As first scored with the v1 local model (before we looked at it):
+{table(t1)}
+Errors then: {misses_md(t1_per, NOTES)}
+''' + ("" if not t1b else f'''
+Re-scored with the final v2 configuration (not a clean test any more, since we had seen it):
+{table(t1b)}
+Tactic accuracy: {tactic_line(t1b)}
+''')}
 {"" if not dev else f'''
-## Dev set ({dev['n']} chats), for transparency
-{table(dev)}{dev_noise}'''}
-{model_md}
-## What we changed between the first run and these numbers (all on the dev set)
-1. The first harness silently counted rate-limited LLM calls as rules-only answers; it now retries until the LLM answers.
-2. Fusion bug: an LLM judgement backed by a verified quote could not pause unless a rule also fired, contrary to the
-   design. Grounded LLM evidence now carries the decision on its own.
-3. Rules were broadened for off-platform payment wording (bank transfer, personal check, "pay via personal").
-4. Added the fine-tuned local model as a supporting layer (it never pauses alone; it cannot cite evidence).
+## Dev set ({dev['n']} chats; used for tuning, optimistic)
+{table(dev)}
+Three of the four dev errors are chats the generator labelled honest whose text is genuinely risky (the seller sends
+their own "checkout link", or asks for payment before a local-pickup inspection), and one "scam" contains no scam.
+We report the numbers as they are rather than relabel.
+'''}
+{comp_md}
+## What changed between the very first run and these numbers
+1. The first harness counted rate-limited LLM calls as rules-only answers (reported 57% recall). It now retries.
+2. Fusion bug: grounded LLM evidence could not pause on its own. Fixed (on dev).
+3. Broader off-platform rules; a three-way vote when a keyword rule and the LLM disagree (on dev).
+4. Local model v1, then v2 (hard examples + tactic head), thresholds and preference chosen on dev.
 
 ## Caveats
-- All chats are LLM-generated: realistic patterns, not real-world prevalence. Real marketplace data would be the next step.
-- With {test['n']} test examples, each rate has an uncertainty of roughly ±8–10 points.
-- The test set uses the same scenario list as dev/train, so it measures generalisation to new wording, not to unseen tactics.
+- All chats are LLM-generated: realistic patterns, not real-world prevalence or adversarial pressure.
+- 80 test examples gives roughly ±8–10 points of uncertainty on each rate.
+- Both test sets use the same 20 scenario types as training (v2 with new categories and wording), so they measure
+  generalisation to new wording, not to entirely new tactics.
 """
 (ROOT / "NUMBERS.md").write_text(numbers, encoding="utf-8")
 readme = (ROOT / "README.md").read_text(encoding="utf-8")

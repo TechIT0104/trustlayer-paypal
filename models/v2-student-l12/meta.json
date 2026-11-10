@@ -1,0 +1,35 @@
+{
+  "name": "v2-student-l12",
+  "base_model": "microsoft/MiniLM-L12-H384-uncased",
+  "role": "student",
+  "teacher": "v2-teacher",
+  "threshold": 0.94,
+  "max_length": 384,
+  "tactics": [
+    "none",
+    "protection_bypass",
+    "off_platform_payment",
+    "advance_fee",
+    "payee_switch",
+    "impersonation",
+    "phishing_link"
+  ],
+  "params_millions": 33.4,
+  "trained_on": {
+    "marketplace": 386,
+    "phone_dialogues": 135,
+    "sources": [
+      "eval/data/train_chats.jsonl",
+      "eval/data/train_hard_chats.jsonl",
+      "BothBosu/scam-dialogue (Apache-2.0)"
+    ]
+  },
+  "threshold_note": "calibrated on this int8 model's dev-set outputs (highest recall at precision >= 0.95)",
+  "dev_metrics_onnx": {
+    "dev_roc_auc": 0.98,
+    "dev_recall_at_thr": 0.939,
+    "dev_tp": 46,
+    "dev_fp": 0,
+    "dev_tactic_accuracy": 0.265
+  }
+}

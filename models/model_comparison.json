@@ -1,0 +1,66 @@
+{
+  "candidates": [
+    {
+      "name": "scam-distilbert",
+      "base_model": "BothBosu/distilbert-scam-classifier-v1.3",
+      "role": "v1",
+      "params_millions": null,
+      "size_mb": 67.3,
+      "dev_roc_auc": 0.962,
+      "threshold": 0.88,
+      "dev_recall_at_thr": 0.857,
+      "dev_tp": 42,
+      "dev_fp": 2,
+      "dev_tactic_accuracy": null,
+      "cpu_latency_ms_p50": 79.0,
+      "cpu_latency_ms_p95": 124.3
+    },
+    {
+      "name": "v2-teacher",
+      "base_model": "BothBosu/distilbert-scam-classifier-v1.3",
+      "role": "teacher",
+      "params_millions": 66.4,
+      "size_mb": 66.8,
+      "dev_roc_auc": 0.962,
+      "threshold": 0.77,
+      "dev_recall_at_thr": 0.898,
+      "dev_tp": 44,
+      "dev_fp": 2,
+      "dev_tactic_accuracy": 0.449,
+      "cpu_latency_ms_p50": 84.4,
+      "cpu_latency_ms_p95": 127.1
+    },
+    {
+      "name": "v2-student-l6",
+      "base_model": "nreimers/MiniLM-L6-H384-uncased",
+      "role": "student",
+      "params_millions": 22.7,
+      "size_mb": 22.9,
+      "dev_roc_auc": 0.966,
+      "threshold": 0.95,
+      "dev_recall_at_thr": 0.837,
+      "dev_tp": 41,
+      "dev_fp": 2,
+      "dev_tactic_accuracy": 0.286,
+      "cpu_latency_ms_p50": 28.0,
+      "cpu_latency_ms_p95": 46.8
+    },
+    {
+      "name": "v2-student-l12",
+      "base_model": "microsoft/MiniLM-L12-H384-uncased",
+      "role": "student",
+      "params_millions": 33.4,
+      "size_mb": 33.9,
+      "dev_roc_auc": 0.98,
+      "threshold": 0.94,
+      "dev_recall_at_thr": 0.939,
+      "dev_tp": 46,
+      "dev_fp": 0,
+      "dev_tactic_accuracy": 0.265,
+      "cpu_latency_ms_p50": 58.4,
+      "cpu_latency_ms_p95": 95.9
+    }
+  ],
+  "chosen": "v2-teacher",
+  "rule": "smallest v2 student within 0.01 dev ROC-AUC and 0.05 dev tactic accuracy of the v2 teacher, else the teacher"
+}

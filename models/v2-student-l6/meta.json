@@ -1,0 +1,35 @@
+{
+  "name": "v2-student-l6",
+  "base_model": "nreimers/MiniLM-L6-H384-uncased",
+  "role": "student",
+  "teacher": "v2-teacher",
+  "threshold": 0.95,
+  "max_length": 384,
+  "tactics": [
+    "none",
+    "protection_bypass",
+    "off_platform_payment",
+    "advance_fee",
+    "payee_switch",
+    "impersonation",
+    "phishing_link"
+  ],
+  "params_millions": 22.7,
+  "trained_on": {
+    "marketplace": 386,
+    "phone_dialogues": 135,
+    "sources": [
+      "eval/data/train_chats.jsonl",
+      "eval/data/train_hard_chats.jsonl",
+      "BothBosu/scam-dialogue (Apache-2.0)"
+    ]
+  },
+  "threshold_note": "calibrated on this int8 model's dev-set outputs (highest recall at precision >= 0.95)",
+  "dev_metrics_onnx": {
+    "dev_roc_auc": 0.966,
+    "dev_recall_at_thr": 0.837,
+    "dev_tp": 41,
+    "dev_fp": 2,
+    "dev_tactic_accuracy": 0.286
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "v2-teacher",
+  "base_model": "BothBosu/distilbert-scam-classifier-v1.3",
+  "role": "teacher",
+  "teacher": null,
+  "threshold": 0.77,
+  "max_length": 384,
+  "tactics": [
+    "none",
+    "protection_bypass",
+    "off_platform_payment",
+    "advance_fee",
+    "payee_switch",
+    "impersonation",
+    "phishing_link"
+  ],
+  "params_millions": 66.4,
+  "trained_on": {
+    "marketplace": 386,
+    "phone_dialogues": 135,
+    "sources": [
+      "eval/data/train_chats.jsonl",
+      "eval/data/train_hard_chats.jsonl",
+      "BothBosu/scam-dialogue (Apache-2.0)"
+    ]
+  },
+  "threshold_note": "calibrated on this int8 model's dev-set outputs (highest recall at precision >= 0.95)",
+  "dev_metrics_onnx": {
+    "dev_roc_auc": 0.962,
+    "dev_recall_at_thr": 0.898,
+    "dev_tp": 44,
+    "dev_fp": 2,
+    "dev_tactic_accuracy": 0.449
+  }
+}

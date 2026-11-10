@@ -1,0 +1,34 @@
+{
+  "role": "student",
+  "base_model": "microsoft/MiniLM-L12-H384-uncased",
+  "teacher": "v2-teacher",
+  "args": {
+    "role": "student",
+    "base": "microsoft/MiniLM-L12-H384-uncased",
+    "teacher": "v2-teacher",
+    "tag": "v2-student-l12",
+    "epochs": 8,
+    "lr": 6e-05,
+    "batch": 16,
+    "max_length": 384,
+    "phone_ratio": 0.35,
+    "tactic_weight": 0.5,
+    "alpha": 0.5,
+    "temperature": 2.0,
+    "export": true,
+    "seed": 13
+  },
+  "dev_marketplace": {
+    "roc_auc": 0.983,
+    "pr_auc": 0.99,
+    "tactic_accuracy": 0.286
+  },
+  "phone_test": {
+    "roc_auc": 1.0,
+    "pr_auc": 1.0
+  },
+  "params_millions": 33.4,
+  "train_seconds": 790,
+  "n_train_marketplace": 386,
+  "onnx_int8_mb": 33.9
+}

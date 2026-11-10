@@ -15,7 +15,18 @@ import threading
 
 from . import config
 
-MODEL_DIR = pathlib.Path(config.ROOT) / "models" / "scam-distilbert"
+MODEL_DIR = pathlib.Path(config.ROOT) / "models" / (config.LOCAL_MODEL or "v2-teacher")
+
+# Tactic head (v2 models). Dataset scenario -> canonical tactic, shared with training.
+TACTICS = ["none", "protection_bypass", "off_platform_payment", "advance_fee", "payee_switch", "impersonation",
+           "phishing_link"]
+TYPE_TO_TACTIC = {
+    "protection_bypass": "protection_bypass", "protection_bypass_subtle": "protection_bypass",
+    "obfuscated": "protection_bypass", "off_platform_payment": "off_platform_payment",
+    "off_platform_giftcard_crypto": "off_platform_payment", "advance_fee": "advance_fee",
+    "advance_fee_deposit": "advance_fee", "payee_switch": "payee_switch", "impersonation": "impersonation",
+    "phishing_link": "phishing_link",
+}
 _lock = threading.Lock()
 _state: dict = {"loaded": False, "session": None, "tokenizer": None, "meta": {}, "error": None}
 
@@ -78,9 +89,17 @@ def predict(listing: dict, seller: dict, messages: list[dict]) -> dict | None:
     enc = _state["tokenizer"].encode(format_chat(listing, seller, messages))
     ids = np.array([enc.ids], dtype=np.int64)
     mask = np.array([enc.attention_mask], dtype=np.int64)
-    logits = _state["session"].run(None, {"input_ids": ids, "attention_mask": mask})[0][0]
+    outs = _state["session"].run(None, {"input_ids": ids, "attention_mask": mask})
+    logits = outs[0][0]
     e = np.exp(logits - logits.max())
     p = float(e[1] / e.sum())
     meta = _state["meta"]
-    return {"p_scam": round(p, 4), "threshold": meta.get("threshold", 0.5), "latency_ms": int((time.time() - t0) * 1000),
-            "model": meta.get("name", "scam-distilbert")}
+    out = {"p_scam": round(p, 4), "threshold": meta.get("threshold", 0.5), "latency_ms": 0,
+           "model": meta.get("name", "scam-distilbert")}
+    if len(outs) > 1 and meta.get("tactics"):  # v2 models also predict which tactic
+        tl = outs[1][0]
+        te = np.exp(tl - tl.max()); te = te / te.sum()
+        k = int(te.argmax())
+        out["tactic"], out["tactic_p"] = meta["tactics"][k], round(float(te[k]), 3)
+    out["latency_ms"] = int((time.time() - t0) * 1000)
+    return out

@@ -1,0 +1,34 @@
+{
+  "role": "student",
+  "base_model": "nreimers/MiniLM-L6-H384-uncased",
+  "teacher": "v2-teacher",
+  "args": {
+    "role": "student",
+    "base": "nreimers/MiniLM-L6-H384-uncased",
+    "teacher": "v2-teacher",
+    "tag": "v2-student-l6",
+    "epochs": 8,
+    "lr": 8e-05,
+    "batch": 16,
+    "max_length": 384,
+    "phone_ratio": 0.35,
+    "tactic_weight": 0.5,
+    "alpha": 0.5,
+    "temperature": 2.0,
+    "export": true,
+    "seed": 13
+  },
+  "dev_marketplace": {
+    "roc_auc": 0.962,
+    "pr_auc": 0.975,
+    "tactic_accuracy": 0.327
+  },
+  "phone_test": {
+    "roc_auc": 1.0,
+    "pr_auc": 1.0
+  },
+  "params_millions": 22.7,
+  "train_seconds": 398,
+  "n_train_marketplace": 386,
+  "onnx_int8_mb": 22.9
+}

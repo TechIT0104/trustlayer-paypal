@@ -121,6 +121,8 @@ def main() -> None:
                "rules": rr["verdict"], "llm": lm["verdict"], "fused": fu["verdict"],
                "model": mo["verdict"] if mo else None, "fused_no_llm": nl["verdict"] if nl else None,
                "p_model": (fu.get("local_model") or {}).get("p_scam"),
+               "model_tactic": (fu.get("local_model") or {}).get("tactic"),
+               "final_tactic": (fu.get("tactic") or {}).get("name"),
                "score": fu["score"], "rule_keys": [s["key"] for s in fu["signals"]],
                "ai_type": ai.get("scam_type"), "ai_risk": ai.get("risk"),
                "grounded": len(ai.get("evidence", [])), "dropped": ai.get("dropped_evidence", 0)}
@@ -135,6 +137,8 @@ def main() -> None:
             f.write(json.dumps(p) + "\n")
     scams = [p for p in per if p["label"] == "scam"]
     type_ok = sum(1 for p in scams if p["ai_type"] in EXPECTED_TACTIC.get(p["type"], {p["type"]}))
+    model_tac_ok = sum(1 for p in scams if p.get("model_tactic") in EXPECTED_TACTIC.get(p["type"], {p["type"]}))
+    final_tac_ok = sum(1 for p in scams if p.get("final_tactic") in EXPECTED_TACTIC.get(p["type"], {p["type"]}))
     summary = {
         "n": len(per), "n_scam": len(scams), "n_legit": len(per) - len(scams),
         "classifier_model": config.GROQ_MODEL, "dataset": str(DATA.relative_to(ROOT)),
@@ -143,6 +147,8 @@ def main() -> None:
         "fused_no_llm": metrics(per, "fused_no_llm") if has_model else None,
         "local_model": localmodel.info(),
         "tactic_accuracy_on_scams": round(type_ok / len(scams), 3) if scams else None,
+        "tactic_accuracy_local_model": round(model_tac_ok / len(scams), 3) if scams else None,
+        "tactic_accuracy_shown": round(final_tac_ok / len(scams), 3) if scams else None,
         "ungrounded_quotes_dropped": sum(p["dropped"] for p in per),
         "llm_latency_ms": {"p50": int(statistics.median(lat)) if lat else None,
                            "p95": int(sorted(lat)[int(0.95 * (len(lat) - 1))]) if lat else None},

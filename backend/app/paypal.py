@@ -154,7 +154,9 @@ def create_payout(receiver_email: str, amount: float, order_ref: str, note: str)
             "email_message": note[:255],
         },
         "items": [{
-            "recipient_type": "EMAIL", "receiver": receiver_email, "amount": _money(amount),
+            # Payouts v1 uses {"value","currency"}, unlike Orders/Payments v2's {"value","currency_code"}
+            "recipient_type": "EMAIL", "receiver": receiver_email,
+            "amount": {"value": f"{amount:.2f}", "currency": config.CURRENCY},
             "note": note[:255], "sender_item_id": order_ref,
         }],
     }, request_id=f"{order_ref}-payout")

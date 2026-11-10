@@ -31,11 +31,11 @@ SCAM_TYPES = [
 
 # (key, regex, weight, strong, human label). Applied to SELLER lines only.
 RULES = [
-    ("friends_family", r"friends?\s*(?:and|&|n|\+)\s*family|\bf\s*&\s*f\b|\bfnf\b|send (?:it )?as (?:a )?(?:gift|friend)|personal payment|family (?:option|payment)",
+    ("friends_family", r"friends?\s*(?:and|&|n|\+)\s*family|\bf\s*[&n-]\s*f\b|\bfnf\b|send (?:it )?as (?:a )?(?:gift|friend)|personal payment|family (?:option|payment)|(?:pay|send)(?: it| me)? (?:via|as|through) personal\b",
      0.55, True, "Asks you to pay as Friends & Family (no buyer protection)"),
     ("avoid_protection", r"(?:no|not|don'?t|avoid|without|skip)\b.{0,30}(?:goods\s*(?:and|&)\s*services|\bg\s*&\s*s\b|\bgns\b|buyer protection|invoice)",
      0.45, True, "Tells you to avoid Goods & Services / buyer protection"),
-    ("off_platform", r"\b(?:zelle|cash ?app|wire (?:transfer|me)|western union|moneygram|bitcoin|btc|crypto|usdt|gift ?cards?|itunes card|steam card|apple card code)\b",
+    ("off_platform", r"\b(?:zelle|cash ?app|wire (?:transfer|me|the (?:funds|money|payment))|bank transfer|direct deposit|personal check|cashier'?s check|money order|western union|moneygram|bitcoin|btc|crypto|usdt|gift ?cards?|itunes card|steam card|apple card code)\b",
      0.5, True, "Pushes a payment method with no protection (gift card / crypto / wire / Zelle)"),
     ("advance_fee", r"\b(?:deposit|holding fee|reservation fee|shipping (?:agent|company) fee|courier fee|insurance fee|customs (?:fee|charge)|release fee|clearance fee|verification fee)\b",
      0.45, True, "Asks for an up-front fee or deposit before the item"),
@@ -183,14 +183,20 @@ def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused
         llm_risk = ai["risk"]
         if not ai["evidence"] and llm_risk > 0.6:
             llm_risk = 0.6  # no grounded quote => the model may not go above "caution" on its own
+        grounded = len(ai["evidence"]) >= 1
         if mode == "llm":
-            score, corroborated = llm_risk, bool(ai["evidence"])
+            score, corroborated = llm_risk, grounded
         else:
-            score = max(llm_risk, rule_score) if strong else 0.65 * llm_risk + 0.35 * rule_score
-            # agreement bonus: independent layers pointing the same way
-            if strong and llm_risk >= 0.5:
+            # Either independent layer can carry the decision when it is backed by evidence:
+            # a strong rule hit, or an LLM judgement with at least one verified quote from the chat.
+            # Ungrounded LLM opinions only blend in (and were already capped at 0.6 above).
+            if strong or grounded:
+                score = max(llm_risk, rule_score)
+            else:
+                score = 0.65 * llm_risk + 0.35 * rule_score
+            if strong and llm_risk >= 0.5:  # agreement bonus: both layers point the same way
                 score = min(1.0, score + 0.1)
-            corroborated = strong or len(ai["evidence"]) >= 1
+            corroborated = strong or grounded
 
     if score >= PAUSE_AT and corroborated:
         verdict = "PAUSE"

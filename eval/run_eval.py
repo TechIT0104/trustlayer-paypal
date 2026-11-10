@@ -18,7 +18,10 @@ sys.path.insert(0, str(ROOT))
 from backend.app import config, llm, scam  # noqa: E402
 
 config.LLM_PROVIDERS = ["groq"]  # one model for a clean measurement (the app itself falls back to Gemini)
-DATA = ROOT / "eval" / "data" / "chats.jsonl"
+# Usage: run_eval.py [dataset.jsonl] [results_dir]. Defaults: the held-out test set.
+DATA = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "eval" / "data" / "test_chats.jsonl"
+if not DATA.is_absolute():
+    DATA = ROOT / DATA
 # dataset sub-scenarios -> classifier tactic(s) that count as a correct label
 EXPECTED_TACTIC = {
     "protection_bypass": {"protection_bypass"}, "protection_bypass_subtle": {"protection_bypass"},
@@ -28,7 +31,7 @@ EXPECTED_TACTIC = {
     "payee_switch": {"payee_switch"}, "impersonation": {"impersonation"},
     "phishing_link": {"phishing_link", "impersonation"},
 }
-OUTDIR = ROOT / "eval" / "results"
+OUTDIR = ROOT / (sys.argv[2] if len(sys.argv) > 2 else "eval/results/test")
 
 
 def load() -> list[dict]:
@@ -47,12 +50,14 @@ def load() -> list[dict]:
 
 
 def run_one(r: dict, mode: str) -> dict:
-    for attempt in range(8):
-        try:
-            return scam.assess(r["listing_n"], r["seller_n"], r["chat"], mode=mode)
-        except llm.LLMUnavailable:
-            time.sleep(8 * (attempt + 1))
-    raise RuntimeError("LLM unavailable")
+    # assess() deliberately falls back to rules when the LLM is unavailable (good for the product, wrong for
+    # measuring the LLM), so a missing AI result here means "rate-limited, try again", not an answer.
+    for attempt in range(12):
+        res = scam.assess(r["listing_n"], r["seller_n"], r["chat"], mode=mode)
+        if mode == "rules" or res.get("ai") is not None:
+            return res
+        time.sleep(min(60, 8 * (attempt + 1)))
+    raise RuntimeError(f"LLM unavailable for {r['id']} after retries: {res.get('ai_error')}")
 
 
 def metrics(rows: list[dict], key: str) -> dict:

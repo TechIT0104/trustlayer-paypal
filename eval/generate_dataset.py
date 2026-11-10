@@ -21,8 +21,14 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from backend.app import config  # noqa: E402
 
 GEN_MODEL = "qwen/qwen3.8-27b"
-OUT = pathlib.Path(__file__).resolve().parent / "data" / "chats.jsonl"
+# Usage: generate_dataset.py [per_spec] [dev|test]
+#   dev  -> eval/data/chats.jsonl       (used while developing; the engine was adjusted after looking at it)
+#   test -> eval/data/test_chats.jsonl  (held out: generated after all changes, only ever scored)
 PER_SPEC = int(sys.argv[1]) if len(sys.argv) > 1 else 5
+SPLIT = sys.argv[2] if len(sys.argv) > 2 else "dev"
+OUT = pathlib.Path(__file__).resolve().parent / "data" / ("test_chats.jsonl" if SPLIT == "test" else "chats.jsonl")
+EXTRA = ("\nThis is a held-out test set: use different items, names, prices and phrasing than the most typical "
+         "examples; vary how directly the tactic is stated." if SPLIT == "test" else "")
 
 SPECS = [
     # (label, type, instruction)
@@ -79,12 +85,16 @@ def generate(instruction: str, n: int) -> tuple[list, dict]:
     body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 1900, "reasoning_effort": "none",
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": SYSTEM},
-                         {"role": "user", "content": TEMPLATE.format(n=n, instruction=instruction)}]}
+                         {"role": "user", "content": TEMPLATE.format(n=n, instruction=instruction) + EXTRA}]}
     for attempt in range(14):
         r = http.post("https://api.groq.com/openai/v1/chat/completions",
                       headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"}, json=body)
         if r.status_code == 400 and "reasoning_effort" in r.text and "reasoning_effort" in body:
             body.pop("reasoning_effort")  # model doesn't support the switch; carry on without it
+            continue
+        if r.status_code == 400:  # e.g. json_validate_failed: the model emitted invalid JSON; just retry
+            print(f"   400 from Groq, retrying: {r.text[:120]}", flush=True)
+            time.sleep(5)
             continue
         if r.status_code == 429:
             wait = max(float(r.headers.get("retry-after") or 20) + 2, min(90, 15 * (attempt + 1)))
@@ -127,7 +137,7 @@ def main() -> None:
             if len(chat) < 3 or not isinstance(ex.get("listing"), dict) or not isinstance(ex.get("seller"), dict):
                 continue
             k += 1
-            good.append({"id": f"{label[0]}{k:03d}", "label": label, "type": typ, "listing": ex["listing"],
+            good.append({"id": f"{'T' if SPLIT == 'test' else ''}{label[0]}{k:03d}", "label": label, "type": typ, "listing": ex["listing"],
                          "seller": ex["seller"], "chat": chat, "source": f"generated:{GEN_MODEL}"})
         with OUT.open("a", encoding="utf-8") as f:
             for g in good:

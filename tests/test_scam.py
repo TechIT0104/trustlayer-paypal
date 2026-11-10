@@ -80,6 +80,15 @@ def test_llm_alone_without_grounded_evidence_cannot_pause(fake_llm):
     assert r["verdict"] != "PAUSE"
 
 
+def test_grounded_llm_evidence_can_pause_without_any_rule_hit(fake_llm):
+    # Paraphrased tactic no regex knows; the LLM catches it AND quotes the real line, so it may pause on its own.
+    msgs = chat(("seller", "checkout fees are brutal, if you do it the other way I'll add a free case"))
+    fake_llm.scam = {"risk": 0.9, "scam_type": "protection_bypass",
+                     "evidence": [{"line": 1, "quote": "if you do it the other way", "why": "steers off checkout"}]}
+    r = scam.assess(FAIR, OLD_SELLER, msgs)
+    assert not [s for s in r["signals"] if s["strong"]] and r["verdict"] == "PAUSE"
+
+
 def test_rules_and_llm_agreeing_pause(fake_llm):
     msgs = chat(("seller", "send $420 friends and family, no goods and services please"))
     fake_llm.scam = {"risk": 0.9, "scam_type": "protection_bypass",

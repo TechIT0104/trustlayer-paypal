@@ -15,6 +15,7 @@ from . import config, db, health, ledger, llm, localmodel, orders, paypal, resol
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     seed.run()  # seeds demo data on first start only
+    localmodel.available()  # load the ONNX model now so the first checkout isn't slowed down
     yield
 
 

@@ -56,6 +56,13 @@ miss_lines = "\n".join(
 per_type = "\n".join(f"| {t} | {v} |" for t, v in test["per_type_fused_recall_or_specificity"].items())
 
 model_md = ""
+ab_path = ROOT / "models" / "ablation-plain-distilbert" / "training_report.json"
+ablation_md = ""
+if ab_path.exists():
+    ab = json.loads(ab_path.read_text())["fine_tuned"]["dev_marketplace"]
+    ablation_md = (f"\n**Ablation: does starting from the public scam model help?** Same data and settings, starting from plain "
+                   f"`distilbert-base-uncased`: dev ROC-AUC {ab['roc_auc']}, PR-AUC {ab['pr_auc']}, precision {pct(ab['precision'])}, "
+                   f"recall {pct(ab['recall'])} at its own dev-chosen threshold.\n")
 if mr:
     z, f = mr["zero_shot"]["dev_marketplace"], mr["fine_tuned"]["dev_marketplace"]
     zp, fp_ = mr["zero_shot"]["phone_test"], mr["fine_tuned"]["phone_test"]
@@ -72,8 +79,11 @@ Exported to ONNX and int8-quantized; runs on CPU in the API. Decision threshold 
 | Public model, zero-shot (threshold 0.5) | {z['roc_auc']} | {z['pr_auc']} | {pct(z['precision'])} | {pct(z['recall'])} | {pct(z['false_positive_rate'])} |
 | After fine-tuning | {f['roc_auc']} | {f['pr_auc']} | {pct(f['precision'])} | {pct(f['recall'])} | {pct(f['false_positive_rate'])} |
 
-Phone-scam test split (out-of-domain sanity check, original task): ROC-AUC {zp['roc_auc']} before → {fp_['roc_auc']} after.
-"""
+Phone-scam test split (the base model's original task): ROC-AUC {zp['roc_auc']} before → {fp_['roc_auc']} after, so
+fine-tuning did not erase what it knew. The base model's perfect zero-shot phone score suggests it saw that split in
+training, so this is only a "did it forget?" check, not a fair benchmark. The dev set chose the best epoch and the threshold,
+so dev numbers here are optimistic; the held-out test table above is the honest one.
+{ablation_md}"""
 
 short = f"""Held-out **test set: {test['n']} marketplace chats** ({test['n_scam']} scams across 10 tactics, {test['n_legit']} honest,
 including traps such as sellers warning *against* Friends & Family), generated only after every rule, prompt and model

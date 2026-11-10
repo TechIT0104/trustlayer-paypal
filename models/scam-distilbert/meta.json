@@ -1,0 +1,36 @@
+{
+  "name": "scam-distilbert",
+  "base_model": "BothBosu/distilbert-scam-classifier-v1.3",
+  "threshold": 0.88,
+  "max_length": 384,
+  "labels": {
+    "0": "NON-SCAM",
+    "1": "SCAM"
+  },
+  "trained_on": {
+    "marketplace_train": 281,
+    "phone_dialogues": 140,
+    "sources": [
+      "eval/data/train_chats.jsonl (gpt-oss-20b generated)",
+      "BothBosu/scam-dialogue (Apache-2.0)"
+    ]
+  },
+  "dev_metrics": {
+    "precision": 1.0,
+    "recall": 0.837,
+    "f1": 0.911,
+    "false_positive_rate": 0.0,
+    "roc_auc": 0.956,
+    "pr_auc": 0.973,
+    "n": 83,
+    "threshold": 0.96
+  },
+  "threshold_gpu_fp32": 0.9600000000000001,
+  "threshold_note": "re-calibrated on the int8 ONNX model's dev-set outputs (highest recall at precision >= 0.95)",
+  "dev_metrics_onnx": {
+    "recall": 0.857,
+    "precision": 0.955,
+    "false_positives": 2,
+    "n": 83
+  }
+}

@@ -318,7 +318,9 @@ function ModelLine({ risk }) {
   const ai = risk.ai || {};
   return html`<div class="model-line">
     <${Icon} name="sparkles" size=${12} />
-    ${ai.provider ? html`<span>${ai.model} · ${ai.latency_ms} ms${ai.cached ? " (cached)" : ""}</span>` : html`<span>AI unavailable, rules only</span>`}
+    ${ai.provider ? html`<span>${ai.model} · ${ai.latency_ms} ms${ai.cached ? " (cached)" : ""}</span>`
+      : html`<span>LLM unavailable: ${risk.local_model ? "rules + local model" : "rules only"}</span>`}
+    ${risk.local_model && html`<span>· local model p=${risk.local_model.p_scam.toFixed(2)} in ${risk.local_model.latency_ms} ms</span>`}
     <span>· score ${risk.score.toFixed(2)}</span>
     ${ai.dropped_evidence ? html`<span>· ${ai.dropped_evidence} unverifiable quote${ai.dropped_evidence > 1 ? "s" : ""} discarded</span>` : ""}
   </div>`;

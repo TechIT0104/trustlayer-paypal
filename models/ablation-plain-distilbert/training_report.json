@@ -1,0 +1,60 @@
+{
+  "base_model": "distilbert-base-uncased",
+  "args": {
+    "base": "distilbert-base-uncased",
+    "tag": "ablation-plain-distilbert",
+    "epochs": 4,
+    "lr": 3e-05,
+    "batch": 16,
+    "max_length": 384,
+    "phone_ratio": 0.5,
+    "export": false,
+    "seed": 13
+  },
+  "zero_shot": {
+    "dev_marketplace": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.0,
+      "roc_auc": 0.487,
+      "pr_auc": 0.575,
+      "n": 83,
+      "threshold": 0.5
+    },
+    "phone_test": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.0,
+      "roc_auc": 0.798,
+      "pr_auc": 0.733,
+      "n": 320,
+      "threshold": 0.5
+    }
+  },
+  "fine_tuned": {
+    "dev_marketplace": {
+      "precision": 0.955,
+      "recall": 0.857,
+      "f1": 0.903,
+      "false_positive_rate": 0.059,
+      "roc_auc": 0.953,
+      "pr_auc": 0.961,
+      "n": 83,
+      "threshold": 0.8
+    },
+    "phone_test": {
+      "precision": 1.0,
+      "recall": 0.956,
+      "f1": 0.978,
+      "false_positive_rate": 0.0,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "n": 320,
+      "threshold": 0.8
+    }
+  },
+  "threshold": 0.8,
+  "train_seconds": 583
+}

@@ -37,6 +37,11 @@ even sees the PayPal button, TrustLayer reads the listing and the buyer–seller
 - **Grounding check**: every quote is verified against the real chat. Made-up "evidence" is thrown out, and an
   LLM-only score without grounded evidence can't trigger a pause on its own. (False positives and invented
   evidence are the documented failure modes of LLM scam detectors, e.g. arXiv 2502.03964, 2606.01475.)
+- **Fine-tuned local model**: a DistilBERT scam classifier we fine-tuned (starting from the public
+  `BothBosu/distilbert-scam-classifier-v1.3`) on marketplace payment chats, exported to ONNX int8, and run on CPU
+  inside the API in tens of milliseconds. It supports the other layers and never pauses alone (it can't cite evidence).
+  When every hosted LLM is rate-limited or down, rules plus this model take over instead of rules alone.
+  See [The fine-tuned local model](#the-fine-tuned-local-model).
 
 Verdict: **CLEAR** → normal protected checkout · **CAUTION** → warning · **PAUSE** → a "break the spell"
 screen that names the tactic in plain words, highlights the exact chat lines, and makes *"Don't pay"* the
@@ -61,6 +66,17 @@ refund rate, volume spikes vs the seller's own baseline, new-account velocity, s
 and Seller Protection coverage from real PayPal capture data. It shows **"dispute rate without TrustLayer's
 early resolution"** and has the LLM explain it all in plain English with three next actions. It never claims
 to know PayPal's internal risk model.
+
+### 4. TrustLayer Plus: subscriptions without the trap
+About 7 in 10 US adults have been charged after forgetting a free trial, and 20+ states now require click-to-cancel.
+Plus is a $4.99/month membership sold on **PayPal Subscriptions** that works the other way round:
+- A real 7-day free trial (a `TRIAL` billing cycle on an ACTIVE PayPal plan). The server **verifies every subscription
+  with PayPal** (`GET /v1/billing/subscriptions/{id}`, matching plan, ACTIVE/APPROVED) before granting anything.
+- **Two days before the first charge**, an AI-written reminder says honestly whether the member has actually used it,
+  and recommends cancelling if not. The date and amount are stated by code, never by the model.
+- **Cancel in one confirmation**, always on the page. The assistant may offer a pause instead, but only if the member
+  got real value; code decides that, and it can never block cancelling.
+- Pause/resume (suspend/activate), and `BILLING.SUBSCRIPTION.*` / `PAYMENT.SALE.COMPLETED` webhooks keep state in sync.
 
 ### Plus: a hash-chained audit ledger
 Every PayPal call and every AI decision is written to an append-only, SHA-256 hash-chained ledger with the PayPal
@@ -106,6 +122,8 @@ _Run `python eval/run_eval.py`; results land in `eval/results/summary.json` and 
 | **Payments v2**: capture (full / partial-final), void, refund, reauthorize | release, scam cancel, resolution settlements, expired holds |
 | **Payouts v1**: create batch, get status | pay the seller after delivery, minus platform fee; reconcile the outcome |
 | **Webhooks**: register, verify signature, consume events | [backend/app/webhooks.py](backend/app/webhooks.py) |
+| **Subscriptions v1**: catalog product, billing plan with free trial, verify, cancel, suspend, activate | TrustLayer Plus ([backend/app/subscriptions.py](backend/app/subscriptions.py)) |
+| **JS SDK** with `vault=true&intent=subscription` (separate namespace) | the Plus subscribe button |
 | **PayPal JS SDK** buttons (`intent=authorize`) | buyer approval in the browser, plus a redirect fallback |
 | Seller Protection status from authorizations and captures | seller health dashboard |
 | **PayPal AI Toolkit** (Claude Code plugin + sandbox MCP server) | used during development to inspect orders and test sandbox flows |
@@ -117,7 +135,10 @@ _Run `python eval/run_eval.py`; results land in `eval/results/summary.json` and 
 | **Groq · `openai/gpt-oss-120b`** (primary) | scam tactic classification with cited evidence; resolution-agent turns; seller-health explanations | JSON-only outputs, temperature 0 for risk, grounded-quote verification, policy enforcement in code, hard timeouts |
 | **Google Gemini · `gemini-flash-lite-latest`** | automatic fallback when Groq is rate-limited or down | same prompts and checks |
 | **Ollama · `mistral`** (local, optional) | offline last-resort fallback | same |
-| **Groq · `qwen/qwen3.8-27b`** | generating the labelled evaluation dataset (a *different* model from the classifier) | labels come from the generation spec, never from a classifier |
+| **Groq · `qwen/qwen3.8-27b`** | generating the labelled dev and held-out test sets (a *different* model from the classifier) | labels come from the generation spec, never from a classifier |
+| **Groq · `openai/gpt-oss-20b`** | generating the training set for the local model (a third generator, disjoint from dev/test) | same |
+| **DistilBERT, fine-tuned by us** (from `BothBosu/distilbert-scam-classifier-v1.3`, Apache-2.0) | local scam probability inside Pay-pause, ONNX int8 on CPU; keeps working during LLM outages | never pauses alone; threshold chosen on the dev set |
+| **`BothBosu/scam-dialogue`** dataset (Apache-2.0) | out-of-domain scam dialogues mixed into fine-tuning | sanity-checked on its own test split |
 | **Claude Code (Anthropic)** with the PayPal AI Toolkit plugin | pair-programming the project | n/a |
 
 ## Run it locally (about 5 minutes)

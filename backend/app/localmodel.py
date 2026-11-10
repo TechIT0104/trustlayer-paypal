@@ -71,10 +71,9 @@ def predict(listing: dict, seller: dict, messages: list[dict]) -> dict | None:
     """Returns {"p_scam": float, "threshold": float, "latency_ms": int, "model": str} or None if unavailable."""
     import time
 
-    import numpy as np
-
     if not available():
         return None
+    import numpy as np
     t0 = time.time()
     enc = _state["tokenizer"].encode(format_chat(listing, seller, messages))
     ids = np.array([enc.ids], dtype=np.int64)

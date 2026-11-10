@@ -162,6 +162,8 @@ PAUSE_AT = 0.65
 CAUTION_AT = 0.35
 MODEL_CONFIDENT = 0.9   # local-model probability treated as "confident" (set on the dev set, not the test set)
 MODEL_ONLY_WEIGHT = 0.8  # without the LLM, the model's probability is discounted: it cannot cite evidence
+MODEL_CAUTION_BAND = 0.75  # below its threshold, the model can at most raise a caution, and only above this
+LLM_CLEAR_AT = 0.15       # LLM risk at or below this, with no cited evidence, counts as "the LLM read it as safe"
 
 
 def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused") -> dict:
@@ -189,7 +191,9 @@ def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused
         # Rules (+ the local model when available). This is also the production path when every LLM is down.
         score, corroborated = rule_score, strong
         if m is not None:
-            score = max(rule_score, m * MODEL_ONLY_WEIGHT)
+            # only a confident model moves the score: its middle range overlaps heavily with honest chats
+            model_score = m * MODEL_ONLY_WEIGHT if m >= m_thr else (CAUTION_AT + 0.05 if m >= MODEL_CAUTION_BAND else 0.0)
+            score = max(rule_score, model_score)
             # the model cannot cite evidence, so without the LLM it needs at least one rule signal to pause
             corroborated = strong or (m >= max(m_thr, MODEL_CONFIDENT) and rule_score > 0)
     else:
@@ -202,7 +206,12 @@ def assess(listing: dict, seller: dict, messages: list[dict], mode: str = "fused
         else:
             # Either evidence-backed layer can carry the decision: a strong rule hit, or an LLM judgement
             # with at least one verified quote. Ungrounded opinions (LLM capped at 0.6, local model) only blend.
-            if strong or grounded:
+            llm_disagrees = strong and not grounded and llm_risk <= LLM_CLEAR_AT
+            if llm_disagrees and not (m is not None and m >= m_thr):
+                # A keyword rule fired but the LLM read the context as safe (e.g. "please DON'T use Friends & Family")
+                # and the local model doesn't side with the rule either: discount the keyword hit.
+                score = max(llm_risk, 0.5 * rule_score)
+            elif strong or grounded:
                 score = max(llm_risk, rule_score)
             elif m is not None:
                 score = 0.5 * llm_risk + 0.3 * m + 0.2 * rule_score

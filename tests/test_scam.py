@@ -139,6 +139,21 @@ def test_local_model_cannot_overrule_a_clean_llm_verdict(fake_llm, fake_local_mo
     assert r["verdict"] != "PAUSE"
 
 
+def test_keyword_hit_is_discounted_when_llm_and_model_both_read_it_as_safe(fake_llm, fake_local_model):
+    msgs = chat(("seller", "please don't use friends and family, use the checkout so you're protected"))
+    fake_llm.scam = {"risk": 0.02, "scam_type": "none", "evidence": []}
+    fake_local_model.p = 0.10
+    assert scam.assess(FAIR, OLD_SELLER, msgs)["verdict"] == "CLEAR"
+
+
+def test_confident_model_keeps_the_keyword_hit_alive_when_the_llm_disagrees(fake_llm, fake_local_model):
+    msgs = chat(("seller", "send it friends and family, it's quicker"))
+    fake_llm.scam = {"risk": 0.05, "scam_type": "none", "evidence": []}
+    fake_local_model.p = 0.97
+    r = scam.assess(FAIR, OLD_SELLER, msgs)
+    assert r["verdict"] in ("CAUTION", "PAUSE")
+
+
 def test_rules_mode_never_calls_the_llm(fake_llm):
     fake_llm.down = True
     r = scam.assess(FAIR, OLD_SELLER, chat(("seller", "hi")), mode="rules")

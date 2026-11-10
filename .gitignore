@@ -16,3 +16,4 @@ eval/results/
 .venv-train/
 models/checkpoints/
 
+models/trial/

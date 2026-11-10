@@ -76,19 +76,23 @@ def _parse(text: str) -> dict:
 
 
 def generate(instruction: str, n: int) -> tuple[list, dict]:
-    body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 3500, "reasoning_effort": "none",
+    body = {"model": GEN_MODEL, "temperature": 0.9, "max_tokens": 2800, "reasoning_effort": "none",
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": SYSTEM},
                          {"role": "user", "content": TEMPLATE.format(n=n, instruction=instruction)}]}
-    for attempt in range(8):
+    for attempt in range(14):
         r = http.post("https://api.groq.com/openai/v1/chat/completions",
                       headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"}, json=body)
         if r.status_code == 400 and "reasoning_effort" in r.text and "reasoning_effort" in body:
             body.pop("reasoning_effort")  # model doesn't support the switch; carry on without it
             continue
         if r.status_code == 429:
-            wait = float(r.headers.get("retry-after") or 20) + 2
-            print(f"   rate limited, waiting {wait:.0f}s")
+            wait = max(float(r.headers.get("retry-after") or 20) + 2, min(90, 15 * (attempt + 1)))
+            try:
+                reason = r.json().get("error", {}).get("message", "")[:140]
+            except ValueError:
+                reason = ""
+            print(f"   rate limited, waiting {wait:.0f}s  {reason if attempt == 0 else ''}", flush=True)
             time.sleep(wait)
             continue
         if r.status_code >= 500:

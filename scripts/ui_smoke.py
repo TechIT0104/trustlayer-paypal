@@ -2,6 +2,7 @@
 
 Usage: python scripts/ui_smoke.py [base_url] [out_dir]
 """
+import json
 import sys
 import time
 import urllib.request
@@ -18,31 +19,34 @@ for _ in range(40):
     except Exception:
         time.sleep(0.5)
 
-PAGES = [("market", "#/"), ("listing_scam", "#/listing/L2"), ("sellers", "#/sellers"),
-         ("seller_gadgethub", "#/sellers/gadgethub"), ("orders", "#/orders"), ("ledger", "#/ledger")]
+orders = json.load(urllib.request.urlopen(BASE + "/api/orders"))
+pages = [("market", "#/", None), ("listing_clear", "#/listing/L1", "check"), ("listing_scam", "#/listing/L2", "check"),
+         ("sellers", "#/sellers", None), ("seller_gadgethub", "#/sellers/gadgethub", None),
+         ("orders", "#/orders", None), ("ledger", "#/ledger", None)]
+for o in orders[:2]:
+    pages.append((f"order_{o['status'].lower()}", f"#/order/{o['id']}", None))
 
 with sync_playwright() as p:
     b = p.chromium.launch()
-    pg = b.new_page(viewport={"width": 1280, "height": 900})
+    pg = b.new_page(viewport={"width": 1366, "height": 900})
     errors = []
     pg.on("console", lambda m: errors.append(f"[{m.type}] {m.text}") if m.type in ("error", "warning") else None)
     pg.on("pageerror", lambda e: errors.append(f"[pageerror] {e}"))
-    for name, frag in PAGES:
+    for name, frag, action in pages:
         pg.goto(f"{BASE}/{frag}")
-        pg.wait_for_timeout(2500 if "seller" in name else 1200)
-        if name == "listing_scam":
-            pg.get_by_role("button", name="Continue to pay").click()
-            pg.wait_for_selector(".verdict", timeout=60000)
-            pg.wait_for_timeout(600)
+        pg.wait_for_timeout(2500 if "seller" in name else 1300)
+        if action == "check":
+            pg.get_by_role("button", name="Continue to payment").click()
+            pg.wait_for_selector(".modal, .status-card", timeout=60000)
+            pg.wait_for_timeout(1500)
         pg.screenshot(path=f"{OUT}/{name}.png", full_page=True)
-        print(f"{name:18s} ok  title={pg.title()!r}  h1={pg.locator('h1').first.inner_text()[:60]!r}")
-    # mobile check: no horizontal scroll
+        print(f"{name:18s} ok  h1={pg.locator('h1, h2').first.inner_text()[:60]!r}")
     m = b.new_page(viewport={"width": 390, "height": 844})
-    m.goto(f"{BASE}/#/listing/L1")
-    m.wait_for_timeout(1200)
-    sw = m.evaluate("document.documentElement.scrollWidth")
-    print("mobile scrollWidth:", sw, "(viewport 390)")
-    m.screenshot(path=f"{OUT}/mobile_listing.png", full_page=True)
+    for name, frag in (("mobile_market", "#/"), ("mobile_listing", "#/listing/L1")):
+        m.goto(f"{BASE}/{frag}")
+        m.wait_for_timeout(1300)
+        print(f"{name:18s} scrollWidth={m.evaluate('document.documentElement.scrollWidth')} (viewport 390)")
+        m.screenshot(path=f"{OUT}/{name}.png", full_page=True)
     b.close()
 print("console errors/warnings:", len(errors))
 for e in errors[:20]:

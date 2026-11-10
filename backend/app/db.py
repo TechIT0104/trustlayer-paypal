@@ -58,8 +58,20 @@ def conn() -> sqlite3.Connection:
             _conn = sqlite3.connect(config.DB_PATH, check_same_thread=False)
             _conn.row_factory = sqlite3.Row
             _conn.executescript(SCHEMA)
+            for table, col, typ in MIGRATIONS:  # additive, idempotent column migrations
+                try:
+                    _conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+                except sqlite3.OperationalError:
+                    pass
             _conn.commit()
         return _conn
+
+
+MIGRATIONS = [
+    ("orders", "payout_status", "TEXT"),
+    ("orders", "auth_expires", "TEXT"),
+    ("orders", "authorized_at", "REAL"),
+]
 
 
 def all(sql: str, params: tuple = ()) -> list[dict]:

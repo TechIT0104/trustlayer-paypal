@@ -1,4 +1,4 @@
-"""Order lifecycle on top of PayPal: hold -> (cooling-off) -> release + payout, or void.
+r"""Order lifecycle on top of PayPal: hold -> (cooling-off) -> release + payout, or void.
 
     CREATED --buyer approves--> authorize --> HELD     (normal escrow, money on hold)
                                           \-> PAUSED   (risky: cooling-off + trusted contact)
@@ -18,6 +18,12 @@ class OrderError(Exception):
     def __init__(self, message: str, status: int = 400):
         super().__init__(message)
         self.status = status
+
+
+class RestartPayment(OrderError):
+    """The buyer must restart PayPal approval (e.g. funding source declined)."""
+    def __init__(self, message: str):
+        super().__init__(message, 422)
 
 
 def listing_bundle(listing_id: str) -> tuple[dict, dict, list[dict]]:
@@ -99,13 +105,25 @@ def authorize(order_id: str) -> dict:
     o = get(order_id)
     if o["status"] != "CREATED":
         return view(o)  # idempotent: already authorized
-    res = paypal.authorize_order(o["paypal_order_id"], o["id"])
+    try:
+        res = paypal.authorize_order(o["paypal_order_id"], o["id"])
+    except paypal.PayPalError as e:
+        issue = paypal.issue_of(e)
+        ledger.append("payment.authorize_failed", {"issue": issue, "status": e.status},
+                      order_id=o["id"], seller_id=o["seller_id"])
+        if issue == "INSTRUMENT_DECLINED":
+            # PayPal's guidance: let the buyer pick another funding source (JS SDK actions.restart()).
+            raise RestartPayment("PayPal declined that funding source. Please choose another one.") from e
+        if issue in ("ORDER_NOT_APPROVED", "PAYER_ACTION_REQUIRED"):
+            raise OrderError("The payment hasn't been approved in PayPal yet.", 409) from e
+        raise
     auth = res["purchase_units"][0]["payments"]["authorizations"][0]
     risk = db.loads(o["risk_json"], {}) or {}
     paused = risk.get("verdict") == "PAUSE"
     status = "PAUSED" if paused else "HELD"
     db.update("orders", "id", o["id"], status=status, authorization_id=auth["id"],
               seller_protection=(auth.get("seller_protection") or {}).get("status"),
+              auth_expires=auth.get("expiration_time"), authorized_at=time.time(),
               hold_until=(time.time() + config.COOLING_OFF_SECONDS) if paused else None)
     ledger.append("payment.authorized", {
         "authorization_id": auth["id"], "amount": auth["amount"]["value"], "status": auth["status"],
@@ -162,7 +180,8 @@ def _payout(o: dict) -> dict:
     res = paypal.create_payout(seller["paypal_email"], amount, o["id"],
                                f"Payout for order {o['id']} (sale ${net_sale:.2f} minus {config.PLATFORM_FEE_PCT:g}% platform fee)")
     batch = res["batch_header"]["payout_batch_id"]
-    db.update("orders", "id", o["id"], status="PAID_OUT", payout_batch_id=batch, payout_amount=amount, fee=fee)
+    db.update("orders", "id", o["id"], status="PAID_OUT", payout_batch_id=batch, payout_amount=amount, fee=fee,
+              payout_status=res["batch_header"].get("batch_status"))
     ledger.append("payout.sent", {"payout_batch_id": batch, "receiver": seller["paypal_email"], "amount": amount,
                                   "platform_fee": fee, "batch_status": res["batch_header"].get("batch_status")},
                   order_id=o["id"], seller_id=o["seller_id"])
@@ -171,7 +190,17 @@ def _payout(o: dict) -> dict:
 
 def capture_remaining(o: dict, keep_amount: float, note: str) -> dict:
     """Capture `keep_amount` of the authorization as final; PayPal releases the rest of the hold."""
-    res = paypal.capture_authorization(o["authorization_id"], keep_amount, o["id"], final=True, note=note)
+    try:
+        res = paypal.capture_authorization(o["authorization_id"], keep_amount, o["id"], final=True, note=note)
+    except paypal.PayPalError as e:
+        if paypal.issue_of(e) not in ("AUTHORIZATION_EXPIRED", "HONOR_PERIOD_EXPIRED"):
+            raise
+        # Past PayPal's 3-day honor period: reauthorize (allowed up to day 29), then capture the new auth.
+        re = paypal.reauthorize(o["authorization_id"], keep_amount, o["id"])
+        db.update("orders", "id", o["id"], authorization_id=re["id"], auth_expires=re.get("expiration_time"))
+        ledger.append("payment.reauthorized", {"old": o["authorization_id"], "new": re["id"]},
+                      order_id=o["id"], seller_id=o["seller_id"])
+        res = paypal.capture_authorization(re["id"], keep_amount, o["id"], final=True, note=note)
     sp = (res.get("seller_protection") or {}).get("status") or o["seller_protection"]
     db.update("orders", "id", o["id"], status="CAPTURED", capture_id=res["id"], captured_amount=keep_amount,
               seller_protection=sp)
@@ -192,6 +221,30 @@ def confirm_received(order_id: str) -> dict:
     if o["status"] == "CAPTURED":
         return _payout(o)
     raise OrderError(f"cannot release an order that is {o['status']}")
+
+
+PAYOUT_FINAL = {"SUCCESS", "UNCLAIMED", "FAILED", "RETURNED", "BLOCKED", "REFUNDED", "REVERSED"}
+
+
+def refresh_payout(order_id: str) -> dict:
+    """Poll PayPal for the payout item's real status (webhooks also update it when configured)."""
+    o = get(order_id)
+    if not o["payout_batch_id"]:
+        raise OrderError("this order has no payout yet")
+    if o["payout_status"] in PAYOUT_FINAL:
+        return view(o)
+    res = paypal.get_payout(o["payout_batch_id"])
+    items = res.get("items") or [{}]
+    status = items[0].get("transaction_status") or res.get("batch_header", {}).get("batch_status")
+    if status and status != o["payout_status"]:
+        set_payout_status(o, status, "poll")
+    return view(get(order_id))
+
+
+def set_payout_status(o: dict, status: str, source: str) -> None:
+    db.update("orders", "id", o["id"], payout_status=status)
+    ledger.append("payout.status", {"payout_batch_id": o["payout_batch_id"], "status": status, "source": source},
+                  order_id=o["id"], seller_id=o["seller_id"])
 
 
 def list_all() -> list[dict]:

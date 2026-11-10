@@ -3,23 +3,25 @@
 Run locally:  .venv/Scripts/python -m uvicorn backend.app.main:app --port 8000
 """
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, db, health, ledger, llm, orders, paypal, resolution, seed
+from . import config, db, health, ledger, llm, orders, paypal, resolution, seed, webhooks
 
-app = FastAPI(title="TrustLayer", version="1.0.0",
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    seed.run()  # seeds demo data on first start only
+    yield
+
+
+app = FastAPI(title="TrustLayer", version="1.0.0", lifespan=lifespan,
               description="A trust layer for both sides of a PayPal payment: Pay-pause scam interception, "
                           "pre-dispute resolution, and seller account health.")
 FRONTEND = config.ROOT / "frontend"
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    seed.run()
 
 
 @app.exception_handler(paypal.PayPalError)
@@ -30,7 +32,13 @@ def _paypal_error(_: Request, e: paypal.PayPalError):
 
 @app.exception_handler(orders.OrderError)
 def _order_error(_: Request, e: orders.OrderError):
-    return JSONResponse(status_code=e.status, content={"error": str(e)})
+    return JSONResponse(status_code=e.status,
+                        content={"error": str(e), "restart": isinstance(e, orders.RestartPayment)})
+
+
+def _demo_only() -> None:
+    if not config.DEMO_MODE:
+        raise orders.OrderError("disabled outside demo mode", 403)
 
 
 @app.exception_handler(llm.LLMUnavailable)
@@ -135,6 +143,17 @@ def received(order_id: str):
     return orders.confirm_received(order_id)
 
 
+@app.post("/api/orders/{order_id}/payout-status")
+def payout_status(order_id: str):
+    return orders.refresh_payout(order_id)
+
+
+@app.post("/api/webhooks/paypal")
+async def paypal_webhook(request: Request):
+    event = await request.json()
+    return webhooks.handle(event, dict(request.headers))
+
+
 @app.get("/api/contact/{token}")
 def contact_case(token: str):
     return orders.contact_case(token)
@@ -178,12 +197,33 @@ def accept_offer(issue_id: str):
     return resolution.accept(issue_id)
 
 
+class DecisionIn(BaseModel):
+    action: str
+    amount: float = 0.0
+
+
+@app.post("/api/issues/{issue_id}/seller-decision")
+def seller_decision(issue_id: str, body: DecisionIn):
+    return resolution.seller_decision(issue_id, body.action, body.amount)
+
+
+@app.get("/api/sellers/{seller_id}/issues")
+def seller_issues(seller_id: str):
+    return resolution.seller_issues(seller_id)
+
+
 # ---------- seller health ----------
 
 @app.get("/api/sellers")
 def sellers():
-    return [health.metrics(s["id"]) | {"series": None}
-            for s in db.all("SELECT id FROM sellers ORDER BY completed_sales DESC")]
+    out = []
+    for s in db.all("SELECT id FROM sellers ORDER BY completed_sales DESC"):
+        m = health.metrics(s["id"])
+        m["series"] = None
+        m["open_cases"] = db.one("SELECT COUNT(*) AS n FROM issues i JOIN orders o ON o.id = i.order_id "
+                                 "WHERE o.seller_id = ? AND i.status = 'ESCALATED'", (s["id"],))["n"]
+        out.append(m)
+    return out
 
 
 @app.get("/api/sellers/{seller_id}/health")
@@ -209,6 +249,7 @@ def get_ledger(limit: int = 200):
 @app.post("/api/ledger/tamper")
 def tamper():
     """Demo only: silently edit one past record so 'Verify' can show the chain detecting it."""
+    _demo_only()
     row = db.one("SELECT seq, data_json FROM events WHERE type LIKE 'payment.%' OR type LIKE 'payout.%' "
                  "ORDER BY seq DESC LIMIT 1") or db.one("SELECT seq, data_json FROM events ORDER BY seq LIMIT 1")
     if not row:
@@ -219,6 +260,7 @@ def tamper():
 
 @app.post("/api/admin/reset")
 def reset():
+    _demo_only()
     seed.run(force=True)
     return {"ok": True}
 

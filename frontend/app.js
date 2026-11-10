@@ -1,7 +1,7 @@
-/* TrustLayer Market — no-build React (htm) frontend. */
+/* TrustLayer frontend: no-build React (htm), served by FastAPI. */
 const { useState, useEffect, useRef, useCallback } = React;
 
-// htm -> React adapter: lets templates use plain HTML habits (class=, style="a:b", stroke-width=)
+// htm -> React adapter so templates can use plain HTML habits (class=, style="a:b", stroke-width=)
 const camel = (s) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 function h(type, props, ...children) {
   if (props) {
@@ -21,6 +21,55 @@ function h(type, props, ...children) {
 }
 const html = htm.bind(h);
 
+// ---------------- icons (stroke icons, Lucide-style geometry) ----------------
+const ICONS = {
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  shieldCheck: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  shieldAlert: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+  pause: '<circle cx="12" cy="12" r="10"/><path d="M10 15V9"/><path d="M14 15V9"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  checkCircle: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  xCircle: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  store: '<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/>',
+  receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+  box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  phone: '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  gamepad: '<path d="M6 11h4"/><path d="M8 9v4"/><path d="M15 12h.01"/><path d="M18 10h.01"/><path d="M17.32 5H6.68a4 4 0 0 0-3.98 3.59C2.6 9.42 2 14.46 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.41-1.41A2 2 0 0 1 9.83 16h4.34a2 2 0 0 1 1.41.59L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.55-.6-6.58-.69-7.26A4 4 0 0 0 17.32 5z"/>',
+  chair: '<path d="M7 3h10a1 1 0 0 1 1 1v8H6V4a1 1 0 0 1 1-1z"/><path d="M5 12h14"/><path d="M12 12v6"/><path d="M8 21l4-3 4 3"/><path d="M4 9v3"/><path d="M20 9v3"/>',
+  headphones: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  send: '<path d="M14.54 21.69a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.64-.64l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/>',
+  sparkles: '<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
+  dollar: '<path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  hash: '<path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/>',
+  trending: '<path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/>',
+};
+function Icon({ name, size = 16, sw = 1.75, cls = "" }) {
+  return html`<svg class=${"icon " + cls} width=${size} height=${size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width=${sw} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+    dangerouslySetInnerHTML=${{ __html: ICONS[name] || ICONS.box }} />`;
+}
+const CATEGORY_ICON = { Cameras: "camera", Phones: "phone", Gaming: "gamepad", Furniture: "chair", Audio: "headphones" };
+
 // ---------------- utils ----------------
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -35,31 +84,43 @@ async function api(path, opts = {}) {
   }
   return data;
 }
-const usd = (v) => "$" + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const ago = (ts) => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 60 ? `${Math.floor(s)}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`; };
+const usd = (v) => "$" + Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usd0 = (v) => "$" + Math.round(Number(v || 0)).toLocaleString("en-US");
+const ago = (ts) => {
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(ts * 1000).toLocaleDateString();
+};
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const initials = (s) => (s || "?").replace(/[^A-Za-z0-9 _]/g, "").split(/[\s_]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
 
 let toastSet = null;
-function toast(msg, err = false) { toastSet && toastSet({ msg, err }); setTimeout(() => toastSet && toastSet(null), 4200); }
+function toast(msg, err = false) { toastSet && toastSet({ msg, err, id: Math.random() }); }
 
 function useRoute() {
   const [hash, setHash] = useState(location.hash || "#/");
-  useEffect(() => { const f = () => { setHash(location.hash || "#/"); window.scrollTo(0, 0); }; addEventListener("hashchange", f); return () => removeEventListener("hashchange", f); }, []);
+  useEffect(() => {
+    const f = () => { setHash(location.hash || "#/"); window.scrollTo(0, 0); };
+    addEventListener("hashchange", f); return () => removeEventListener("hashchange", f);
+  }, []);
   return hash.slice(1).split("/").filter(Boolean);
 }
 const go = (path) => { location.hash = path; };
 
-function useFetch(path, deps = []) {
+function useFetch(path) {
   const [state, setState] = useState({ data: null, error: null, loading: true });
   const load = useCallback(() => {
-    if (!path) return;
-    api(path).then((data) => setState({ data, error: null, loading: false }))
-      .catch((error) => setState({ data: null, error, loading: false }));
+    if (!path) return Promise.resolve();
+    return api(path).then((data) => setState({ data, error: null, loading: false }))
+      .catch((error) => setState((s) => ({ data: s.data, error, loading: false })));
   }, [path]);
-  useEffect(() => { setState((s) => ({ ...s, loading: true })); load(); }, [path, ...deps]);
+  useEffect(() => { setState({ data: null, error: null, loading: true }); load(); }, [path]);
   return [state, load];
 }
 
-// PayPal JS SDK (loaded once with intent=authorize so approvals create holds, not charges)
+// PayPal JS SDK, loaded once with intent=authorize so approvals create holds, not charges.
 let sdkPromise = null;
 function loadPayPal(clientId) {
   if (window.paypal) return Promise.resolve(window.paypal);
@@ -75,14 +136,35 @@ function loadPayPal(clientId) {
   return sdkPromise;
 }
 
+// ---------------- shared bits ----------------
+const ORDER_STATUS = {
+  CREATED: ["Awaiting approval", ""], HELD: ["On hold", "accent"], PAUSED: ["Paused", "danger"],
+  CAPTURED: ["Captured", "success"], PAID_OUT: ["Completed", "success"], CANCELLED: ["Cancelled", ""], CLOSED: ["Closed", ""],
+};
+const StatusBadge = ({ status }) => { const [l, c] = ORDER_STATUS[status] || [status, ""]; return html`<span class=${"badge " + c}><span class="dot"></span>${l}</span>`; };
+const VERDICT = {
+  CLEAR: { label: "No risk found", tone: "success", icon: "shieldCheck" },
+  CAUTION: { label: "Proceed with care", tone: "warning", icon: "alert" },
+  PAUSE: { label: "Payment paused", tone: "danger", icon: "shieldAlert" },
+};
+const VerdictBadge = ({ v }) => html`<span class=${"badge " + VERDICT[v].tone}><span class="dot"></span>${v === "CLEAR" ? "Clear" : v === "CAUTION" ? "Caution" : "Paused"}</span>`;
+const Spinner = () => html`<span class="spinner"></span>`;
+const Loading = ({ rows = 3 }) => html`<div class="stack">${Array.from({ length: rows }).map((_, i) => html`<div class="skeleton" key=${i} style="height:72px"></div>`)}</div>`;
+const ErrorBox = ({ error }) => html`<div class="callout danger"><${Icon} name="alert" /><div>${error.message}</div></div>`;
+function PageHead({ title, sub, right }) {
+  return html`<div class="page-head"><div><h1>${title}</h1>${sub && html`<p>${sub}</p>`}</div>${right}</div>`;
+}
+function Back({ to, label }) { return html`<a class="back" href=${to}><${Icon} name="arrowLeft" /> ${label}</a>`; }
+
 // ---------------- shell ----------------
 function App() {
   const route = useRoute();
   const [cfg, setCfg] = useState(null);
   const [t, setT] = useState(null);
   toastSet = setT;
+  useEffect(() => { if (!t) return; const id = setTimeout(() => setT(null), 4500); return () => clearTimeout(id); }, [t]);
   useEffect(() => { api("/api/config").then(setCfg).catch(() => setCfg({})); }, []);
-  const [page, a, b] = route;
+  const [page, a] = route;
   let body;
   if (!page) body = html`<${Market} />`;
   else if (page === "listing") body = html`<${ListingPage} id=${a} cfg=${cfg} />`;
@@ -91,52 +173,55 @@ function App() {
   else if (page === "contact") body = html`<${ContactPage} token=${a} />`;
   else if (page === "sellers") body = a ? html`<${SellerPage} id=${a} />` : html`<${SellersPage} />`;
   else if (page === "ledger") body = html`<${LedgerPage} />`;
-  else body = html`<p>Not found. <a href="#/">Back to market</a></p>`;
-  const on = (p) => (page || "") === p ? "on" : "";
+  else body = html`<div class="empty">Page not found. <a href="#/">Back to marketplace</a></div>`;
+  const tab = (p, icon, label, also = []) => {
+    const on = (page || "") === p || also.includes(page);
+    return html`<a class=${on ? "active" : ""} href=${"#/" + p}><${Icon} name=${icon} />${label}</a>`;
+  };
   return html`
-    <header class="top"><div class="wrap">
-      <a class="logo" href="#/">🛡️ TrustLayer <small>Market</small></a>
-      <span class="sandbox">PayPal SANDBOX</span>
-      <nav class="nav">
-        <a class=${on("") || on("listing")} href="#/">Market</a>
-        <a class=${on("orders") || on("order")} href="#/orders">My orders</a>
-        <a class=${on("sellers")} href="#/sellers">Seller health</a>
-        <a class=${on("ledger")} href="#/ledger">Ledger</a>
+    <header class="topbar"><div class="container">
+      <a class="brand" href="#/"><span class="brand-mark"><${Icon} name="shield" size=${17} sw=${2} /></span>TrustLayer</a>
+      <nav class="tabs">
+        ${tab("", "store", "Marketplace", ["listing"])}
+        ${tab("orders", "receipt", "Orders", ["order"])}
+        ${tab("sellers", "activity", "Seller health")}
+        ${tab("ledger", "file", "Audit log")}
       </nav>
+      <span class="env badge warning"><span class="dot"></span>PayPal Sandbox</span>
     </div></header>
-    <main><div class="wrap">${body}</div></main>
-    ${t && html`<div class=${"toast " + (t.err ? "err" : "")}>${t.msg}</div>`}`;
+    <main><div class="container">${body}</div></main>
+    ${t && html`<div class=${"toast " + (t.err ? "err" : "")} key=${t.id} role="status"><${Icon} name=${t.err ? "alert" : "checkCircle"} />${t.msg}</div>`}`;
 }
 
-// ---------------- market ----------------
+// ---------------- marketplace ----------------
 function Market() {
   const [{ data, loading, error }] = useFetch("/api/listings");
   return html`
-    <section class="hero">
-      <h1>Buy from strangers without getting scammed.</h1>
-      <p>Every payment on this marketplace runs through PayPal and TrustLayer: AI checks the chat before your money moves,
-         holds it until delivery, and settles problems before they become disputes.</p>
-      <div class="pill3"><span>⏸ Pay-pause scam interception</span><span>🤝 Pre-dispute resolution</span><span>📈 Seller account health</span></div>
-    </section>
-    ${loading && html`<p><span class="spinner"></span> Loading listings…</p>`}
-    ${error && html`<p class="chip bad">${error.message}</p>`}
-    <div class="grid cards">
+    <${PageHead} title="Marketplace" sub="Buy from independent sellers. Every payment is screened before money moves, held by PayPal until delivery, and protected if something goes wrong." />
+    <div class="steps3">
+      <div><span class="ic"><${Icon} name="shieldCheck" size=${18} /></span><div><b>Screened before you pay</b><span>The listing and chat are checked for known scam tactics.</span></div></div>
+      <div><span class="ic"><${Icon} name="lock" size=${18} /></span><div><b>Held until delivery</b><span>PayPal authorizes the payment; the seller is paid after you confirm.</span></div></div>
+      <div><span class="ic"><${Icon} name="message" size=${18} /></span><div><b>Resolved before disputes</b><span>Problems are settled within the seller's policy in minutes.</span></div></div>
+    </div>
+    ${error && html`<${ErrorBox} error=${error} />`}
+    ${loading ? html`<div class="grid cols-listings">${[1, 2, 3, 4].map((i) => html`<div class="skeleton" key=${i} style="height:300px"></div>`)}</div>` : html`
+    <div class="grid cols-listings">
       ${(data || []).map((l) => html`
-        <a class="panel card" href=${"#/listing/" + l.id} key=${l.id}>
-          <div class="thumb">${l.emoji}</div>
-          <div class="small muted">${l.category} · ${l.condition}</div>
-          <h3 style="margin:2px 0 6px">${l.title}</h3>
-          <div class="row between">
-            <div class="price">${usd(l.price)}<span class="strike">${usd(l.ref_price)}</span></div>
-          </div>
-          <div class="row small muted" style="margin-top:6px">
-            <span>@${l.handle}</span>
-            ${l.completed_sales > 0
-              ? html`<span class="chip">★ ${l.rating} · ${l.completed_sales} sales</span>`
-              : html`<span class="chip warn">New seller · ${l.joined_days_ago}d</span>`}
+        <a class="card link listing-card" href=${"#/listing/" + l.id} key=${l.id}>
+          <div style="padding:12px 12px 0"><div class=${"tile t-" + l.category}><${Icon} name=${CATEGORY_ICON[l.category] || "box"} size=${44} sw=${1.25} /></div></div>
+          <div class="body">
+            <div class="xs text-2">${l.category} · ${l.condition}</div>
+            <div class="title">${l.title}</div>
+            <div style="margin:6px 0 12px"><span class="price">${usd0(l.price)}</span><span class="ref">typically ${usd0(l.ref_price)}</span></div>
+            <div class="row spread">
+              <div class="seller-line"><span class="avatar">${initials(l.seller_name)}</span>${l.handle}</div>
+              ${l.completed_sales > 0
+                ? html`<span class="xs text-2 num">${l.rating} · ${l.completed_sales} sales</span>`
+                : html`<span class="badge warning">New seller</span>`}
+            </div>
           </div>
         </a>`)}
-    </div>`;
+    </div>`}`;
 }
 
 // ---------------- listing + checkout ----------------
@@ -147,121 +232,201 @@ function ListingPage({ id, cfg }) {
   const [text, setText] = useState("");
   const [asSeller, setAsSeller] = useState(false);
   useEffect(() => setRisk(null), [id]);
-  if (loading && !data) return html`<p><span class="spinner"></span> Loading…</p>`;
-  if (error) return html`<p class="chip bad">${error.message}</p>`;
+  if (loading && !data) return html`<${Loading} rows=${4} />`;
+  if (error && !data) return html`<${ErrorBox} error=${error} />`;
   const { listing, seller, messages } = data;
-  const flagged = new Set((risk?.ai?.evidence || []).map((e) => e.line).concat((risk?.signals || []).filter((s) => s.line).map((s) => s.line)));
+  const flagged = new Set([...(risk?.ai?.evidence || []).map((e) => e.line), ...(risk?.signals || []).filter((s) => s.line && s.strong).map((s) => s.line)]);
 
   const send = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-    await api(`/api/listings/${id}/messages`, { method: "POST", body: { text, sender: asSeller ? "seller" : "buyer" } });
-    setText(""); setRisk(null); reload();
+    try {
+      await api(`/api/listings/${id}/messages`, { method: "POST", body: { text, sender: asSeller ? "seller" : "buyer" } });
+      setText(""); setRisk(null); reload();
+    } catch (err) { toast(err.message, true); }
   };
   const check = async () => {
     setChecking(true);
     try { setRisk(await api("/api/assess", { method: "POST", body: { listing_id: id } })); }
-    catch (e) { toast(e.message, true); }
+    catch (err) { toast(err.message, true); }
     finally { setChecking(false); }
   };
 
   return html`
-    <p class="small"><a href="#/">← Market</a></p>
-    <div class="grid two">
-      <div class="grid">
-        <div class="panel">
-          <div class="thumb" style="height:180px;font-size:90px">${listing.emoji}</div>
-          <div class="small muted">${listing.category} · ${listing.condition}</div>
-          <h1>${listing.title}</h1>
-          <div class="price" style="font-size:26px">${usd(listing.price)}<span class="strike">typical ${usd(listing.ref_price)}</span></div>
-          <p>${listing.description}</p>
-          <div class="row">
-            <span class="chip brand">@${seller.handle}</span>
-            ${seller.completed_sales > 0 ? html`<span class="chip">★ ${seller.rating} · ${seller.completed_sales} sales</span>` : html`<span class="chip warn">New seller · joined ${seller.joined_days_ago} days ago</span>`}
-            <span class="chip">${seller.location}</span>
+    <${Back} to="#/" label="Marketplace" />
+    <div class="grid cols-main">
+      <div class="stack">
+        <div class="card"><div class="card-body">
+          <div class="listing-hero">
+            <div class=${"tile t-" + listing.category}><${Icon} name=${CATEGORY_ICON[listing.category] || "box"} size=${56} sw=${1.2} /></div>
+            <div>
+              <div class="xs text-2">${listing.category} · ${listing.condition}</div>
+              <h1 style="font-size:22px;line-height:30px;margin:4px 0 8px;letter-spacing:-.02em">${listing.title}</h1>
+              <div><span class="price lg">${usd(listing.price)}</span><span class="ref">typically ${usd0(listing.ref_price)}</span></div>
+              <p class="text-2" style="margin:12px 0 0">${listing.description}</p>
+            </div>
+          </div>
+          <hr class="divider" />
+          <div class="row spread">
+            <div class="row" style="gap:12px"><span class="avatar lg">${initials(seller.name)}</span>
+              <div><div style="font-weight:600">${seller.name}</div><div class="xs text-2">@${seller.handle} · ${seller.location} · member for ${seller.joined_days_ago} days</div></div></div>
+            ${seller.completed_sales > 0
+              ? html`<span class="badge">${seller.rating} rating · ${seller.completed_sales} sales</span>`
+              : html`<span class="badge warning"><span class="dot"></span>New seller, no sales yet</span>`}
+          </div>
+        </div></div>
+
+        <div class="card">
+          <div class="card-head"><div><h2>Conversation</h2><div class="sub">Messages between you and the seller</div></div>
+            ${flagged.size > 0 && html`<span class="badge danger"><span class="dot"></span>${flagged.size} message${flagged.size > 1 ? "s" : ""} flagged</span>`}</div>
+          <div class="card-body">
+            <div class="convo">
+              ${messages.map((m, i) => {
+                const mine = m.sender === "buyer", bad = flagged.has(i + 1);
+                return html`<div class=${"msg " + (mine ? "mine " : "") + (bad ? "flagged" : "")} key=${i}>
+                  <span class="avatar">${mine ? "You" : initials(seller.name)}</span>
+                  <div><div class="bubble">${m.text}</div>
+                    ${bad && html`<div class="lineref"><${Icon} name="alert" size=${12} />Line ${i + 1} cited as evidence</div>`}</div>
+                </div>`;
+              })}
+            </div>
+            <form class="composer" style="margin-top:16px" onSubmit=${send}>
+              <input class="input" value=${text} onChange=${(e) => setText(e.target.value)} placeholder=${asSeller ? "Write a message as the seller" : "Write a message"} aria-label="Message" />
+              <button class="btn" aria-label="Send"><${Icon} name="send" /></button>
+            </form>
+            <label class="check" style="margin-top:10px"><input type="checkbox" checked=${asSeller} onChange=${(e) => setAsSeller(e.target.checked)} /> Demo control: post as the seller to test your own scam script</label>
           </div>
         </div>
-        <div class="panel">
-          <div class="row between"><h2 style="margin:0">Chat with @${seller.handle}</h2>
-            ${flagged.size > 0 && html`<span class="chip bad">${flagged.size} flagged line${flagged.size > 1 ? "s" : ""}</span>`}</div>
-          <div class="chat" style="margin-top:10px">
-            ${messages.map((m, i) => html`
-              <div class=${"bubble " + m.sender + (flagged.has(i + 1) ? " flag" : "")} key=${i}>
-                ${flagged.has(i + 1) && html`<span class="ln">line ${i + 1}</span>`}${m.text}
-              </div>`)}
-          </div>
-          <form class="composer" onSubmit=${send}>
-            <input value=${text} onChange=${(e) => setText(e.target.value)} placeholder=${asSeller ? "Type as the SELLER (demo)…" : "Message the seller…"} />
-            <button class="btn">Send</button>
-          </form>
-          <label class="tiny muted row" style="margin-top:6px"><input type="checkbox" checked=${asSeller} onChange=${(e) => setAsSeller(e.target.checked)} /> Demo: write as the seller (try your own scam script)</label>
-        </div>
       </div>
-      <div class="grid">
-        <${Checkout} listing=${listing} risk=${risk} checking=${checking} onCheck=${check} cfg=${cfg} />
-      </div>
+      <div class="sticky"><${Checkout} listing=${listing} seller=${seller} risk=${risk} checking=${checking} onCheck=${check} cfg=${cfg} /></div>
     </div>`;
 }
 
-function Checkout({ listing, risk, checking, onCheck, cfg }) {
-  const [ack, setAck] = useState(false);
-  const [contact, setContact] = useState("");
-  const [contactOk, setContactOk] = useState(false);
-  useEffect(() => { setAck(false); setContactOk(false); }, [risk]);
-  const authorized = (o) => { toast(o.status === "PAUSED" ? "Payment authorized and paused for cooling-off." : "Payment authorized — money is on hold until delivery."); go("/order/" + o.id); };
-
-  if (!risk) return html`
-    <div class="panel">
-      <h2>Checkout</h2>
-      <div class="row between"><span>${listing.title}</span><b>${usd(listing.price)}</b></div>
-      <div class="escrow">🔒 <span>Payments are <b>authorized, not charged</b>. PayPal holds the money until you confirm delivery, and the seller is paid out after that.</span></div>
-      <button class="btn primary big" onClick=${onCheck} disabled=${checking}>
-        ${checking ? html`<span class="spinner"></span> Checking this payment…` : `Continue to pay ${usd(listing.price)}`}
-      </button>
-      <p class="tiny muted" style="margin-bottom:0">Before any money moves, TrustLayer checks the listing and chat for scam tactics (rules + AI, about 1–2 s).</p>
-    </div>`;
-
-  const ai = risk.ai || {};
-  if (risk.verdict === "PAUSE" && !(ack && contactOk)) return html`
-    <div class="verdict PAUSE">
-      <div class="head">⏸ We paused this payment</div>
-      <div class="spell">${ai.spell_breaker || ai.explanation || "This conversation matches known scam patterns."}</div>
-      ${(ai.evidence || []).length > 0 && html`<h3>What we saw in the chat</h3>
-        ${ai.evidence.map((e) => html`<div class="quote" key=${e.line}><b>line ${e.line}</b>“${e.quote}”${e.why && html`<div class="tiny muted">${e.why}</div>`}</div>`)}`}
-      <h3 style="margin-top:14px">Warning signs</h3>
-      ${risk.signals.map((s) => html`<div class="signal" key=${s.key}><span class=${"dot " + (s.strong ? "strong" : "weak")}></span>${s.label}</div>`)}
-      ${ai.safe_next_step && html`<div class="escrow">✅ <span><b>Safer move:</b> ${ai.safe_next_step}</span></div>`}
-      <button class="btn danger big" onClick=${() => { toast("Good call. No money moved."); go("/"); }}>Don't pay — take me back</button>
-      ${!ack
-        ? html`<button class="btn ghost" style="width:100%;margin-top:8px" onClick=${() => setAck(true)}>I know this seller personally — continue with protection</button>`
-        : html`<div class="panel" style="margin-top:12px;box-shadow:none">
-            <h3>Continue with a safety net</h3>
-            <p class="small muted" style="margin-top:0">Your payment will be <b>held for a ${Math.round((cfg?.cooling_off_seconds || 120) / 60)}-minute cooling-off period</b> (24 hours in production). You can cancel any time before delivery, and someone you trust gets a link to double-check it.</p>
-            <input class="field" style="width:100%" placeholder="Trusted contact (name or email, e.g. Mom)" value=${contact} onChange=${(e) => setContact(e.target.value)} />
-            <button class="btn primary" style="width:100%;margin-top:8px" disabled=${!contact.trim()} onClick=${() => setContactOk(true)}>Continue to PayPal</button>
-          </div>`}
-      <${RiskMeta} risk=${risk} />
-    </div>`;
-
-  return html`
-    <div class=${"verdict " + risk.verdict}>
-      <div class="head">${risk.verdict === "PAUSE" ? "⏸ Paused payment — protected checkout" : risk.verdict === "CAUTION" ? "⚠️ Proceed with care" : "✅ Looks safe"}</div>
-      ${risk.verdict === "CLEAR" && html`<p class="small" style="margin:0">No scam tactics found in the listing or chat. ${ai.explanation || ""}</p>`}
-      ${risk.verdict === "CAUTION" && html`<p class="small" style="margin:0">${ai.explanation}</p>${risk.signals.map((s) => html`<div class="signal" key=${s.key}><span class=${"dot " + (s.strong ? "strong" : "weak")}></span>${s.label}</div>`)}`}
-      ${risk.verdict === "PAUSE" && html`<p class="small" style="margin:0">Cooling-off + trusted contact (<b>${contact}</b>) enabled. You can cancel until delivery.</p>`}
-      <div class="escrow">🔒 <span>You're approving a <b>hold</b> of ${usd(listing.price)} — nothing is charged until you confirm delivery.</span></div>
-      <${PayButtons} listing=${listing} cfg=${cfg} acknowledged=${risk.verdict === "PAUSE"} contact=${contact} onAuthorized=${authorized} />
-      <${RiskMeta} risk=${risk} />
-    </div>`;
+function Signals({ risk }) {
+  return html`${risk.signals.map((s) => html`<div class="signal" key=${s.key}>
+    <span class=${"sev " + (s.strong ? "high" : "med")}>${s.strong ? "High" : "Medium"}</span><span>${s.label}</span></div>`)}`;
 }
 
-function RiskMeta({ risk }) {
+function Evidence({ ai, compact = false }) {
+  return html`${(ai.evidence || []).map((e) => html`<div class="evidence" key=${e.line + e.quote}>
+    <div class="m">Message line ${e.line}</div><div class="q">"${e.quote}"</div>${!compact && e.why && html`<div class="w">${e.why}</div>`}</div>`)}`;
+}
+
+function ModelLine({ risk }) {
   const ai = risk.ai || {};
-  return html`<div class="meta">
-    Score ${risk.score} (rules ${risk.rule_score}${ai.risk !== undefined ? `, AI ${ai.risk}` : ""}) · tactic: <b>${ai.scam_type || "n/a"}</b>
-    ${ai.provider ? ` · ${ai.model} via ${ai.provider} in ${ai.latency_ms} ms${ai.cached ? " (cached)" : ""}` : ` · AI unavailable, rules only`}
-    ${ai.dropped_evidence ? ` · ${ai.dropped_evidence} unverifiable AI quote(s) discarded` : ""}
+  return html`<div class="model-line">
+    <${Icon} name="sparkles" size=${12} />
+    ${ai.provider ? html`<span>${ai.model} · ${ai.latency_ms} ms${ai.cached ? " (cached)" : ""}</span>` : html`<span>AI unavailable, rules only</span>`}
+    <span>· score ${risk.score.toFixed(2)}</span>
+    ${ai.dropped_evidence ? html`<span>· ${ai.dropped_evidence} unverifiable quote${ai.dropped_evidence > 1 ? "s" : ""} discarded</span>` : ""}
   </div>`;
+}
+
+function PauseModal({ risk, cfg, onCancel, onProceed }) {
+  const ai = risk.ai || {};
+  const [step, setStep] = useState("warn");
+  const [contact, setContact] = useState("");
+  const mins = Math.round((cfg?.cooling_off_seconds || 120) / 60);
+  useEffect(() => {
+    const f = (e) => e.key === "Escape" && onCancel();
+    addEventListener("keydown", f);
+    document.body.style.overflow = "hidden";
+    return () => { removeEventListener("keydown", f); document.body.style.overflow = ""; };
+  }, []);
+  // Portal to <body>: the checkout column is position:sticky, which would trap the overlay under the header.
+  return ReactDOM.createPortal(html`<div class="backdrop" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+    <div class="modal">
+      ${step === "warn" ? html`
+        <div class="m-head">
+          <div class="feat-ic danger"><${Icon} name="pause" size=${22} /></div>
+          <h2 id="pause-title">We paused this payment</h2>
+          <p class="text-2" style="margin:6px 0 0">${ai.spell_breaker || ai.explanation || "This conversation matches known scam patterns."}</p>
+        </div>
+        <div class="m-body stack compact" style="gap:12px">
+          ${(ai.evidence || []).length > 0 && html`<div><div class="eyebrow">From the conversation</div><${Evidence} ai=${ai} compact /></div>`}
+          <div><div class="eyebrow" style="margin-bottom:2px">Risk signals</div><${Signals} risk=${risk} /></div>
+          ${ai.safe_next_step && html`<div class="callout info"><${Icon} name="info" /><div><b>Safer option.</b> ${ai.safe_next_step}</div></div>`}
+          <${ModelLine} risk=${risk} />
+        </div>
+        <div class="m-foot">
+          <button class="btn dark lg block" onClick=${onCancel} autofocus>Don't send money</button>
+          <button class="btn ghost block" onClick=${() => setStep("safeguard")}>I know this seller personally, continue with safeguards</button>
+        </div>` : html`
+        <div class="m-head">
+          <div class="feat-ic danger" style="background:var(--accent-soft);color:var(--accent);box-shadow:0 0 0 8px #f5faff"><${Icon} name="lock" size=${22} /></div>
+          <h2 id="pause-title">Continue with safeguards</h2>
+          <p class="text-2" style="margin:6px 0 0">Your payment will be authorized but not charged. Two protections stay on until delivery:</p>
+        </div>
+        <div class="m-body stack" style="gap:12px">
+          <div class="signal"><${Icon} name="clock" /><span><b>${mins}-minute cooling-off.</b> Scams rely on urgency. You can cancel at any time and the hold is voided. (24 hours in production.)</span></div>
+          <div class="signal"><${Icon} name="users" /><span><b>A trusted contact reviews it.</b> They get a summary of the warning signs and can stop the payment.</span></div>
+          <div><label class="field" for="contact">Trusted contact</label>
+            <input id="contact" class="input" placeholder="Name or email, for example a family member" value=${contact} onChange=${(e) => setContact(e.target.value)} /></div>
+        </div>
+        <div class="m-foot">
+          <button class="btn primary lg block" disabled=${!contact.trim()} onClick=${() => onProceed(contact.trim())}>Continue to PayPal</button>
+          <button class="btn ghost block" onClick=${onCancel}>Cancel, don't pay</button>
+        </div>`}
+    </div></div>`, document.body);
+}
+
+function Checkout({ listing, seller, risk, checking, onCheck, cfg }) {
+  const [modal, setModal] = useState(false);
+  const [contact, setContact] = useState(null);
+  useEffect(() => { setContact(null); setModal(risk?.verdict === "PAUSE"); }, [risk]);
+  const authorized = (o) => {
+    toast(o.status === "PAUSED" ? "Payment authorized and paused for cooling-off." : "Payment authorized. Funds are on hold until delivery.");
+    go("/order/" + o.id);
+  };
+  const fee = (listing.price * (cfg?.platform_fee_pct || 5)) / 100;
+  const summary = html`<div class="card-body" style="padding-bottom:0">
+    <div class="ledger-lines">
+      <span class="k">Item</span><span class="v">${usd(listing.price)}</span>
+      <span class="k">Buyer fees</span><span class="v">${usd(0)}</span>
+      <span class="k total">Authorized now</span><span class="v total">${usd(listing.price)}</span>
+    </div>
+    <div class="xs text-3" style="margin-top:8px">Seller receives the sale minus a ${cfg?.platform_fee_pct || 5}% platform fee (${usd(fee)}) after you confirm delivery.</div>
+  </div>`;
+
+  if (!risk) return html`<div class="card">
+    <div class="card-head"><div><h2>Checkout</h2><div class="sub">Paid with PayPal</div></div><${Icon} name="lock" cls="text-3" /></div>
+    ${summary}
+    <div class="card-body">
+      <div class="callout info" style="margin-bottom:16px"><${Icon} name="shieldCheck" /><div>Before any money moves, TrustLayer checks this listing and conversation for scam tactics. It takes about two seconds.</div></div>
+      <button class="btn primary lg block" onClick=${onCheck} disabled=${checking}>
+        ${checking ? html`<${Spinner} /> Checking payment safety` : html`Continue to payment <${Icon} name="arrowRight" />`}
+      </button>
+    </div></div>`;
+
+  const v = VERDICT[risk.verdict];
+  const ai = risk.ai || {};
+  const paused = risk.verdict === "PAUSE";
+  return html`
+    ${modal && paused && html`<${PauseModal} risk=${risk} cfg=${cfg}
+        onCancel=${() => { setModal(false); toast("Payment cancelled. No money moved."); go("/"); }}
+        onProceed=${(c) => { setContact(c); setModal(false); }} />`}
+    <div class="stack">
+      <div class="status-card">
+        <div class="status-head">
+          <span class=${"ic " + v.tone}><${Icon} name=${v.icon} size=${20} /></span>
+          <div style="flex:1"><div class="row spread"><div class="t">${paused && contact ? "Protected checkout" : v.label}</div><${VerdictBadge} v=${risk.verdict} /></div>
+            <div class="d">${risk.verdict === "CLEAR" ? (ai.explanation || "No scam tactics found in the listing or conversation.")
+              : paused && contact ? `Cooling-off and trusted contact (${contact}) will be enabled.` : ai.explanation}</div></div>
+        </div>
+        ${risk.verdict === "CAUTION" && html`<div class="section"><${Signals} risk=${risk} /></div>`}
+        ${paused && !contact && html`<div class="section stack" style="gap:8px">
+          <button class="btn dark block" onClick=${() => go("/")}>Don't send money</button>
+          <button class="btn ghost block" onClick=${() => setModal(true)}>Review the warning</button></div>`}
+        <div class="section"><${ModelLine} risk=${risk} /></div>
+      </div>
+      ${(!paused || contact) && html`<div class="card">
+        <div class="card-head"><div><h2>Checkout</h2><div class="sub">Approve a hold with PayPal</div></div><${Icon} name="lock" cls="text-3" /></div>
+        ${summary}
+        <div class="card-body">
+          <div class="callout info" style="margin-bottom:16px"><${Icon} name="lock" /><div>You're approving a <b>hold</b> of ${usd(listing.price)}. Nothing is charged until you confirm delivery.</div></div>
+          <${PayButtons} listing=${listing} cfg=${cfg} acknowledged=${paused} contact=${contact} onAuthorized=${authorized} />
+        </div></div>`}
+    </div>`;
 }
 
 function PayButtons({ listing, cfg, acknowledged, contact, onAuthorized }) {
@@ -269,6 +434,7 @@ function PayButtons({ listing, cfg, acknowledged, contact, onAuthorized }) {
   const orderRef = useRef(null);
   const [state, setState] = useState("loading");
   const [redirect, setRedirect] = useState(null);
+  const body = { listing_id: listing.id, acknowledged, trusted_contact: contact || null };
   useEffect(() => {
     if (!cfg?.paypal_client_id) { setState("nosdk"); return; }
     let dead = false;
@@ -276,70 +442,99 @@ function PayButtons({ listing, cfg, acknowledged, contact, onAuthorized }) {
       if (dead || !ref.current) return;
       ref.current.innerHTML = "";
       paypal.Buttons({
-        style: { layout: "vertical", color: "gold", shape: "rect", label: "paypal", height: 45 },
-        createOrder: async () => {
-          const r = await api("/api/orders", { method: "POST", body: { listing_id: listing.id, acknowledged, trusted_contact: contact || null } });
-          orderRef.current = r.order_id; return r.paypal_order_id;
-        },
-        onApprove: async () => {
+        style: { layout: "vertical", color: "gold", shape: "rect", label: "paypal", height: 44 },
+        createOrder: async () => { const r = await api("/api/orders", { method: "POST", body }); orderRef.current = r.order_id; return r.paypal_order_id; },
+        onApprove: async (_data, actions) => {
           try { onAuthorized(await api(`/api/orders/${orderRef.current}/authorize`, { method: "POST" })); }
-          catch (e) { toast(e.message, true); }
+          catch (e) {
+            toast(e.message, true);
+            if (e.data?.restart) return actions.restart();  // PayPal's recovery path for INSTRUMENT_DECLINED
+          }
         },
-        onCancel: () => toast("PayPal window closed — nothing was charged."),
+        onCancel: () => toast("PayPal window closed. Nothing was charged."),
         onError: (e) => toast("PayPal error: " + (e?.message || e), true),
       }).render(ref.current).then(() => !dead && setState("ready")).catch(() => setState("nosdk"));
     }).catch(() => !dead && setState("nosdk"));
     return () => { dead = true; };
   }, [listing.id, acknowledged, contact, cfg?.paypal_client_id]);
-
   const startRedirect = async () => {
-    try {
-      const r = await api("/api/orders", { method: "POST", body: { listing_id: listing.id, acknowledged, trusted_contact: contact || null } });
-      setRedirect(r); window.open(r.approve_url, "_blank");
-    } catch (e) { toast(e.message, true); }
+    try { const r = await api("/api/orders", { method: "POST", body }); setRedirect(r); window.open(r.approve_url, "_blank"); }
+    catch (e) { toast(e.message, true); }
   };
   const finishRedirect = async () => {
     try { onAuthorized(await api(`/api/orders/${redirect.order_id}/authorize`, { method: "POST" })); }
-    catch (e) { toast(e.status === 502 ? "Not approved yet — finish approving in the PayPal tab first." : e.message, true); }
+    catch (e) { toast(e.status === 502 ? "Not approved yet. Finish approving in the PayPal tab first." : e.message, true); }
   };
   return html`<div>
-    ${state === "loading" && html`<p class="small"><span class="spinner"></span> Loading PayPal…</p>`}
+    ${state === "loading" && html`<div class="skeleton" style="height:44px"></div>`}
     <div ref=${ref}></div>
-    <details class="tiny muted" style="margin-top:6px" open=${state === "nosdk"}>
-      <summary>PayPal button not showing? Use redirect checkout</summary>
-      ${!redirect
-        ? html`<button class="btn" style="margin-top:6px" onClick=${startRedirect}>Open PayPal approval in a new tab</button>`
-        : html`<div class="row" style="margin-top:6px"><a class="btn" href=${redirect.approve_url} target="_blank">Reopen PayPal</a><button class="btn primary" onClick=${finishRedirect}>I've approved it</button></div>`}
-      <div style="margin-top:4px">Sandbox buyer login: use a PayPal sandbox <b>personal</b> account.</div>
+    <details class="fallback" style="margin-top:10px" open=${state === "nosdk"}>
+      <summary>PayPal button not loading? Use redirect checkout</summary>
+      <div class="row" style="margin-top:10px">
+        ${!redirect ? html`<button class="btn sm" onClick=${startRedirect}><${Icon} name="external" size=${14} />Open PayPal in a new tab</button>`
+          : html`<a class="btn sm" href=${redirect.approve_url} target="_blank">Reopen PayPal</a><button class="btn sm primary" onClick=${finishRedirect}>I've approved it</button>`}
+      </div>
+      <div class="xs text-3" style="margin-top:8px">Sign in with a PayPal sandbox personal account.</div>
     </details>
   </div>`;
 }
 
 // ---------------- orders ----------------
-const STATUS_CHIP = { CREATED: "", PAUSED: "bad", HELD: "brand", CAPTURED: "ok", PAID_OUT: "ok", CANCELLED: "", CLOSED: "" };
 function OrdersPage() {
-  const [{ data, loading }] = useFetch("/api/orders");
+  const [{ data, loading, error }] = useFetch("/api/orders");
   return html`
-    <h1>My orders</h1><p class="sub">Every payment is a PayPal authorization held in escrow until you confirm delivery.</p>
-    ${loading && html`<p><span class="spinner"></span></p>`}
-    ${data && data.length === 0 && html`<div class="panel">No orders yet. <a href="#/">Buy something</a> to see the flow.</div>`}
-    <div class="grid">
-      ${(data || []).map((o) => html`
-        <a class="panel card row between" href=${"#/order/" + o.id} key=${o.id}>
-          <div class="row"><span style="font-size:30px">${o.listing?.emoji}</span>
-            <div><b>${o.listing?.title}</b><div class="tiny muted">${o.id} · ${ago(o.created_at)} · @${o.seller?.handle}</div></div></div>
-          <div class="row"><b>${usd(o.amount)}</b><span class=${"chip " + (STATUS_CHIP[o.status] || "")}>${o.status.replace("_", " ")}</span>
-            ${o.issue?.status === "RESOLVED" && html`<span class="chip ok">resolved</span>`}</div>
-        </a>`)}
-    </div>`;
+    <${PageHead} title="Orders" sub="Every payment is a PayPal authorization held until you confirm delivery." />
+    ${error && html`<${ErrorBox} error=${error} />`}
+    ${loading ? html`<${Loading} />` : data.length === 0 ? html`<div class="card empty">
+        <div class="ic neutral" style="width:44px;height:44px;border-radius:10px;display:grid;place-items:center"><${Icon} name="receipt" size=${20} /></div>
+        <b>No orders yet</b><div class="sm" style="margin-top:4px">Buy something from the <a href="#/">marketplace</a> to see the payment flow.</div></div>`
+      : html`<div class="card table-wrap"><table class="table">
+        <thead><tr><th>Order</th><th>Item</th><th>Seller</th><th>Screening</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead>
+        <tbody>${data.map((o) => html`<tr class="click" key=${o.id} onClick=${() => go("/order/" + o.id)}>
+          <td><div class="cell-main mono">${o.id}</div><div class="cell-sub">${ago(o.created_at)}</div></td>
+          <td><div class="cell-main">${o.listing?.title}</div></td>
+          <td class="text-2">@${o.seller?.handle}</td>
+          <td>${o.risk ? html`<${VerdictBadge} v=${o.risk.verdict} />` : ""}</td>
+          <td class="num" style="text-align:right;font-weight:500">${usd(o.amount)}</td>
+          <td><div class="row"><${StatusBadge} status=${o.status} />${o.issue?.status === "RESOLVED" && html`<span class="badge success">Resolved</span>`}
+            ${o.issue?.status === "ESCALATED" && html`<span class="badge warning">With seller</span>`}</div></td>
+        </tr>`)}</tbody></table></div>`}`;
 }
 
-function Steps({ o }) {
-  const order = ["CREATED", "HELD", "CAPTURED", "PAID_OUT"];
-  const idx = o.status === "PAUSED" ? 1 : order.indexOf(o.status);
-  const labels = ["Approved", o.status === "PAUSED" ? "Paused (cooling-off)" : "On hold (escrow)", "Captured", "Seller paid"];
-  if (o.status === "CANCELLED") return html`<div class="steps"><div class="step done">Approved</div><div class="step done">On hold</div><div class="step bad">Cancelled · voided</div></div>`;
-  return html`<div class="steps">${labels.map((l, i) => html`<div class=${"step " + (i <= idx ? (o.status === "PAUSED" && i === 1 ? "bad" : "done") : "")} key=${i}>${l}</div>`)}</div>`;
+function Progress({ o }) {
+  if (o.status === "CANCELLED") return html`<div class="progress" style="grid-template-columns:repeat(3,1fr)">
+    <div class="p done"><div class="bar"></div>Approved</div><div class="p done"><div class="bar"></div>Held</div><div class="p alert"><div class="bar"></div>Voided, not charged</div></div>`;
+  const idx = { CREATED: 0, HELD: 1, PAUSED: 1, CAPTURED: 2, PAID_OUT: 3, CLOSED: 3 }[o.status] ?? 0;
+  const labels = ["Approved", o.status === "PAUSED" ? "Cooling-off" : "Held by PayPal", "Captured", "Seller paid"];
+  return html`<div class="progress">${labels.map((l, i) => html`<div key=${i} class=${"p " + (i <= idx ? (o.status === "PAUSED" && i === 1 ? "alert" : i === 3 && idx === 3 ? "done ok" : "done") : "")}><div class="bar"></div>${l}</div>`)}</div>`;
+}
+
+const EVENT_UI = {
+  "order.created": ["file", "", (d) => ["Order created", `PayPal order ${d.paypal_order_id} · intent AUTHORIZE`]],
+  "payment.authorized": ["lock", "accent", (d) => [d.mode === "cooling_off" ? "Payment authorized, cooling-off started" : "Payment authorized and held", `Authorization ${d.authorization_id} · ${usd(d.amount)}`]],
+  "pause.expired": ["clock", "", () => ["Cooling-off ended", "Funds remain on hold until delivery"]],
+  "pause.released": ["users", "success", () => ["Trusted contact approved", "Cooling-off ended early"]],
+  "contact.verdict": ["users", "warning", (d) => [`Trusted contact: ${d.verdict === "scam" ? "flagged as scam" : "looks fine"}`, d.contact || ""]],
+  "payment.voided": ["xCircle", "danger", (d) => ["Authorization voided", `Buyer not charged · ${(d.reason || "").replaceAll("_", " ")}`]],
+  "resolution.opened": ["message", "", () => ["Problem reported", "Resolution assistant engaged"]],
+  "resolution.turn": ["sparkles", "", (d) => [`Assistant proposed: ${(d.offer?.type || "").replaceAll("_", " ")}`, d.offer?.amount ? usd(d.offer.amount) + (d.policy_adjustments?.length ? " · adjusted to policy" : "") : (d.issue_type || "").replaceAll("_", " ")]],
+  "resolution.escalated": ["inbox", "warning", () => ["Escalated to seller", "Waiting for the seller's decision"]],
+  "resolution.settled": ["checkCircle", "success", (d) => ["Resolved without a dispute", `${usd(d.amount)} · ${d.method}`]],
+  "resolution.declined": ["xCircle", "", () => ["Seller declined", "Buyer may still contact PayPal"]],
+  "payment.captured": ["dollar", "success", (d) => [`Captured ${usd(d.amount)}`, d.released_to_buyer > 0 ? `${usd(d.released_to_buyer)} of the hold released to buyer` : `Capture ${d.capture_id}`]],
+  "payment.refunded": ["undo", "warning", (d) => [`Refunded ${usd(d.amount)}`, `Refund ${d.refund_id}`]],
+  "payout.sent": ["wallet", "success", (d) => [`Seller payout sent: ${usd(d.amount)}`, `Batch ${d.payout_batch_id} · fee ${usd(d.platform_fee)}`]],
+  "payout.status": ["wallet", "", (d) => [`Payout ${String(d.status).toLowerCase()}`, `Batch ${d.payout_batch_id}`]],
+  "webhook.received": ["link", "", (d) => [`PayPal webhook: ${d.event_type}`, d.verified ? "Signature verified" : "Unverified"]],
+  "paypal.error": ["alert", "danger", (d) => ["PayPal error", `${d.action} · ${d.status}`]],
+};
+function Timeline({ events }) {
+  const list = [...(events || [])].reverse().filter((e) => EVENT_UI[e.type]);
+  return html`<div class="timeline">${list.map((e) => {
+    const [icon, tone, fn] = EVENT_UI[e.type]; const [t, d] = fn(e.data || {});
+    return html`<div class="tl-item" key=${e.seq}><span class=${"tl-ic " + tone}><${Icon} name=${icon} size=${14} /></span>
+      <div><div class="tl-t">${t}</div><div class="tl-d">${d}${d ? " · " : ""}${clock(e.ts)}</div></div></div>`;
+  })}</div>`;
 }
 
 function OrderPage({ id }) {
@@ -353,72 +548,82 @@ function OrderPage({ id }) {
     const t = setInterval(() => setSecs((s) => { if (s <= 1) { clearInterval(t); setTimeout(reload, 800); return 0; } return s - 1; }), 1000);
     return () => clearInterval(t);
   }, [o?.status, o?.id]);
-  useEffect(() => { if (o?.status === "PAUSED") api(`/api/orders/${id}/contact-link`).then(setLink).catch(() => {}); }, [o?.status]);
-  if (error) return html`<p class="chip bad">${error.message}</p>`;
-  if (!o) return html`<p><span class="spinner"></span></p>`;
+  useEffect(() => { if (o?.status === "PAUSED" || o?.trusted_contact) api(`/api/orders/${id}/contact-link`).then(setLink).catch(() => {}); }, [o?.status]);
+  useEffect(() => {  // payout status settles a few seconds after sending
+    if (o?.status === "PAID_OUT" && ["PENDING", "PROCESSING", null, undefined].includes(o.payout_status)) {
+      const t = setTimeout(() => api(`/api/orders/${id}/payout-status`, { method: "POST" }).then(reload).catch(() => {}), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [o?.status, o?.payout_status]);
+  if (error && !o) return html`<${ErrorBox} error=${error} />`;
+  if (!o) return html`<${Loading} rows=${3} />`;
   const act = async (path, msg) => {
     setBusy(true);
-    try { await api(`/api/orders/${id}/${path}`, { method: "POST" }); toast(msg); reload(); }
+    try { await api(`/api/orders/${id}/${path}`, { method: "POST" }); toast(msg); await reload(); }
     catch (e) { toast(e.message, true); } finally { setBusy(false); }
   };
-  const ids = [["PayPal order", o.paypal_order_id], ["Authorization (hold)", o.authorization_id], ["Capture", o.capture_id], ["Payout batch", o.payout_batch_id]].filter(([, v]) => v);
+  const released = o.captured_amount ? Math.max(0, o.amount - o.captured_amount) : 0;
+  const refs = [["PayPal order", o.paypal_order_id], ["Authorization", o.authorization_id], ["Capture", o.capture_id], ["Payout batch", o.payout_batch_id]].filter(([, v]) => v);
   return html`
-    <p class="small"><a href="#/orders">← My orders</a></p>
-    <div class="grid two">
-      <div class="grid">
-        <div class="panel">
-          <div class="row between"><div class="row"><span style="font-size:34px">${o.listing?.emoji}</span>
-            <div><h2 style="margin:0">${o.listing?.title}</h2><div class="tiny muted">${o.id} · seller @${o.seller?.handle}</div></div></div>
-            <div class="price">${usd(o.amount)}</div></div>
-          <${Steps} o=${o} />
-          ${o.status === "PAUSED" && html`
-            <div class="verdict PAUSE" style="margin-bottom:12px">
-              <div class="head">⏸ Cooling-off in progress</div>
-              <div class="countdown">${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}</div>
-              <p class="small">Your ${usd(o.amount)} is <b>authorized but not charged</b>. Take a breath — scammers rely on urgency. Cancel now and the hold is voided instantly.</p>
-              ${link && html`<p class="small">Trusted contact <b>${link.contact}</b> was sent a link to double-check. <a href=${"#/contact/" + link.token} target="_blank">Open their view ↗</a></p>`}
-              <button class="btn danger big" disabled=${busy} onClick=${() => act("cancel", "Cancelled — the hold was voided. You were not charged.")}>Cancel payment (void hold)</button>
-            </div>`}
-          ${o.status === "HELD" && html`
-            <div class="escrow">🔒 <span>${usd(o.amount)} is on hold with PayPal. The seller is paid only after you confirm delivery.</span></div>
-            <div class="row">
-              <button class="btn ok" disabled=${busy} onClick=${() => act("received", "Delivery confirmed — payment captured and seller paid out.")}>✓ Item received — release payment</button>
-              <button class="btn" disabled=${busy} onClick=${() => act("cancel", "Order cancelled — hold voided.")}>Cancel order</button>
-            </div>`}
-          ${o.status === "CAPTURED" && html`<div class="row"><button class="btn ok" disabled=${busy} onClick=${() => act("received", "Seller paid out via PayPal Payouts.")}>Pay out seller</button></div>`}
-          ${o.status === "CANCELLED" && html`<div class="verdict CLEAR"><div class="head">🛡️ No money moved</div><p class="small" style="margin:0">The PayPal authorization was voided. The buyer was never charged.</p></div>`}
-          ${o.status === "PAID_OUT" && html`<div class="verdict CLEAR"><div class="head">✅ Complete</div><p class="small" style="margin:0">Captured ${usd(o.captured_amount)}${o.refunded_amount ? `, refunded ${usd(o.refunded_amount)}` : ""}. Seller received ${usd(o.payout_amount)} via PayPal Payouts after a ${usd(o.fee)} platform fee.</p></div>`}
-          <hr class="sep" />
-          <dl class="kv">
-            ${ids.map(([k, v]) => html`<dt key=${k}>${k}</dt><dd class="mono">${v}</dd>`)}
-            ${o.seller_protection && html`<dt>Seller Protection</dt><dd><span class=${"chip " + (o.seller_protection === "ELIGIBLE" ? "ok" : "")}>${o.seller_protection}</span></dd>`}
-            ${o.risk && html`<dt>Pay-pause verdict</dt><dd><span class=${"chip " + (o.risk.verdict === "PAUSE" ? "bad" : o.risk.verdict === "CAUTION" ? "warn" : "ok")}>${o.risk.verdict}</span> score ${o.risk.score}</dd>`}
-          </dl>
-        </div>
-        <div class="panel">
-          <h2>Audit trail <span class="tiny muted">(hash-chained ledger)</span></h2>
-          <div class="tablewrap"><table><tbody>
-            ${(o.events || []).map((e) => html`<tr key=${e.seq}><td class="mono">#${e.seq}</td><td><b>${e.type}</b><div class="tiny muted">${ago(e.ts)}</div></td>
-              <td class="tiny mono">${Object.entries(e.data).filter(([, v]) => v !== null && typeof v !== "object").slice(0, 4).map(([k, v]) => `${k}=${v}`).join("  ")}</td></tr>`)}
-          </tbody></table></div>
-        </div>
+    <${Back} to="#/orders" label="Orders" />
+    <div class="page-head"><div>
+      <div class="row"><h1>${o.listing?.title}</h1><${StatusBadge} status=${o.status} /></div>
+      <p><span class="mono">${o.id}</span> · sold by @${o.seller?.handle} · ${ago(o.created_at)}</p></div>
+      <div class="price lg">${usd(o.amount)}</div></div>
+    <div class="grid cols-main">
+      <div class="stack">
+        <div class="card"><div class="card-body stack" style="gap:20px">
+          <${Progress} o=${o} />
+          ${o.status === "PAUSED" && html`<div class="callout danger" style="align-items:center">
+            <${Icon} name="clock" size=${20} />
+            <div style="flex:1"><div style="font-weight:600;color:var(--text)">Cooling-off in progress</div>
+              <div class="text-2">Your ${usd(o.amount)} is authorized, not charged. Cancel now and the hold is voided instantly.</div>
+              ${link && html`<div class="text-2" style="margin-top:4px">${link.contact} has been asked to review it. <a href=${"#/contact/" + link.token} target="_blank">Open their view <${Icon} name="external" size=${12} /></a></div>`}</div>
+            <div class="countdown">${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}</div></div>`}
+          ${o.status === "CANCELLED" && html`<div class="callout success"><${Icon} name="shieldCheck" /><div><b>No money moved.</b> The PayPal authorization was voided and the buyer was never charged.</div></div>`}
+          ${o.status === "PAID_OUT" && html`<div class="callout success"><${Icon} name="checkCircle" /><div><b>Order complete.</b> The seller was paid ${usd(o.payout_amount)} through PayPal Payouts${o.payout_status ? ` (status: ${o.payout_status.toLowerCase()})` : ""}.</div></div>`}
+          ${o.auth_expires && ["HELD", "PAUSED"].includes(o.status) && html`<div class="xs text-3">Authorization valid until ${new Date(o.auth_expires).toLocaleString()}</div>`}
+          <div class="row">
+            ${o.status === "PAUSED" && html`<button class="btn danger" disabled=${busy} onClick=${() => act("cancel", "Payment cancelled. The hold was voided.")}><${Icon} name="xCircle" />Cancel payment</button>`}
+            ${o.status === "HELD" && html`
+              <button class="btn primary" disabled=${busy} onClick=${() => act("received", "Delivery confirmed. Payment captured and seller paid.")}><${Icon} name="check" />Confirm delivery and release payment</button>
+              <button class="btn" disabled=${busy} onClick=${() => act("cancel", "Order cancelled. Hold voided.")}>Cancel order</button>`}
+            ${o.status === "CAPTURED" && html`<button class="btn primary" disabled=${busy} onClick=${() => act("received", "Seller paid through PayPal Payouts.")}><${Icon} name="wallet" />Pay out seller</button>`}
+            ${busy && html`<span class="text-2 sm"><${Spinner} /> Talking to PayPal</span>`}
+          </div>
+        </div></div>
+        <div class="card"><div class="card-head"><h2>Activity</h2><span class="xs text-3">Recorded in the audit log</span></div>
+          <div class="card-body"><${Timeline} events=${o.events} /></div></div>
       </div>
-      <div class="grid">
+      <div class="stack sticky">
+        <div class="card"><div class="card-head"><h2>Payment</h2></div><div class="card-body">
+          <div class="ledger-lines">
+            <span class="k">Authorized (held)</span><span class="v">${usd(o.amount)}</span>
+            ${released > 0 && html`<span class="k">Released to buyer</span><span class="v">− ${usd(released)}</span>`}
+            ${o.captured_amount > 0 && html`<span class="k">Captured</span><span class="v">${usd(o.captured_amount)}</span>`}
+            ${o.refunded_amount > 0 && html`<span class="k">Refunded</span><span class="v">− ${usd(o.refunded_amount)}</span>`}
+            ${o.fee > 0 && html`<span class="k">Platform fee</span><span class="v">− ${usd(o.fee)}</span>`}
+            ${o.payout_amount > 0 && html`<span class="k total">Seller payout</span><span class="v total">${usd(o.payout_amount)}</span>`}
+          </div>
+          ${refs.length > 0 && html`<hr class="divider" /><dl class="refs">${refs.map(([k, v]) => html`<dt key=${k}>${k}</dt><dd class="mono">${v}</dd>`)}
+            ${o.seller_protection && html`<dt>Seller Protection</dt><dd><span class=${"badge " + (o.seller_protection === "ELIGIBLE" ? "success" : "")}>${o.seller_protection.toLowerCase()}</span></dd>`}
+            ${o.risk && html`<dt>Screening</dt><dd><${VerdictBadge} v=${o.risk.verdict} /></dd>`}</dl>`}
+        </div></div>
         ${["HELD", "CAPTURED", "PAID_OUT"].includes(o.status) || o.issue
           ? html`<${Resolution} order=${o} onChange=${reload} />`
-          : html`<div class="panel"><h2>Problem with this order?</h2><p class="small muted">Once your payment is on hold you can report a problem here and get it settled before any dispute.</p></div>`}
+          : html`<div class="card"><div class="card-body"><h3>Problem with this order?</h3><p class="sm text-2" style="margin:0">Once your payment is on hold you can report a problem and get it settled here, before anyone opens a PayPal dispute.</p></div></div>`}
       </div>
     </div>`;
 }
 
-// ---------------- resolution agent ----------------
+// ---------------- resolution assistant ----------------
 function Resolution({ order, onChange }) {
   const [issue, setIssue] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const box = useRef(null);
-  useEffect(() => { if (order.issue) api(`/api/issues/${order.issue.id}`).then(setIssue).catch(() => {}); }, [order.issue?.id]);
-  useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight; }, [issue]);
+  useEffect(() => { if (order.issue) api(`/api/issues/${order.issue.id}`).then(setIssue).catch(() => {}); }, [order.issue?.id, order.issue?.status]);
+  useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight; }, [issue, busy]);
   const send = async (e) => {
     e.preventDefault(); if (!text.trim()) return;
     setBusy(true);
@@ -427,167 +632,216 @@ function Resolution({ order, onChange }) {
   };
   const accept = async () => {
     setBusy(true);
-    try { setIssue(await api(`/api/issues/${issue.id}/accept`, { method: "POST" })); toast("Settled on PayPal — dispute avoided."); onChange(); }
+    try { setIssue(await api(`/api/issues/${issue.id}/accept`, { method: "POST" })); toast("Settled on PayPal. Dispute avoided."); onChange(); }
     catch (err) { toast(err.message, true); } finally { setBusy(false); }
   };
   const last = issue?.transcript?.filter((t) => t.role === "agent").slice(-1)[0];
-  const resolved = issue?.status === "RESOLVED";
-  const starters = ["It arrived 4 days late and I missed my trip.", "The item has a crack that wasn't in the photos.", "I changed my mind, can I get a refund?"];
-  return html`<div class="panel">
-    <h2>🤝 Resolve a problem</h2>
-    <p class="small muted" style="margin-top:-6px">An AI assistant for <b>${order.seller?.handle}</b> settles issues within the seller's policy — before anyone has to open a PayPal dispute.</p>
-    <div class="chat" ref=${box}>
-      ${(issue?.transcript || []).map((t, i) => html`<div class=${"bubble " + (t.role === "buyer" ? "buyer" : "agent")} key=${i}>${t.text}
-        ${t.role === "agent" && t.issue_type && html`<div class="tiny muted" style="margin-top:4px">${t.issue_type} · dispute risk ${Math.round((t.dispute_risk || 0) * 100)}% · ${t.provider}</div>`}
-        ${(t.policy_notes || []).map((n, j) => html`<div class="tiny" style="margin-top:4px;color:var(--warn)" key=${j}>⚖️ ${n}</div>`)}
-      </div>`)}
-      ${busy && html`<div class="bubble agent"><span class="spinner"></span></div>`}
-    </div>
-    ${!issue && html`<div class="row" style="margin-top:8px">${starters.map((s) => html`<button class="btn tiny" key=${s} onClick=${() => setText(s)}>${s}</button>`)}</div>`}
-    ${last?.offer && ["partial_refund", "full_refund"].includes(last.offer.type) && !resolved && html`
-      <div class="offer row between">
-        <div><b>Offer: ${usd(last.offer.amount)} back</b><div class="tiny muted">${order.status === "HELD" ? "Released from your hold — never charged" : "Refunded to your PayPal via the Refunds API"}</div></div>
-        <button class="btn ok" disabled=${busy} onClick=${accept}>Accept ${usd(last.offer.amount)}</button>
-      </div>`}
-    ${resolved && html`<div class="verdict CLEAR" style="margin-top:10px"><div class="head">✅ Resolved — dispute avoided</div>
-      <p class="small" style="margin:0">${usd(issue.outcome.amount)} settled on PayPal (${issue.outcome.method}). Logged to the ledger and the seller's health score.</p></div>`}
-    ${!resolved && html`<form class="composer" onSubmit=${send}>
-      <input value=${text} onChange=${(e) => setText(e.target.value)} placeholder="Describe the problem…" disabled=${busy} />
-      <button class="btn primary" disabled=${busy}>Send</button></form>`}
-  </div>`;
+  const status = issue?.status;
+  const done = status === "RESOLVED" || status === "DECLINED";
+  const starters = ["It arrived 4 days late and I missed my trip.", "There's a crack that wasn't in the photos.", "I changed my mind. Can I get a refund?"];
+  return html`<div class="card">
+    <div class="card-head"><div><h2>Resolution center</h2><div class="sub">Settled within ${order.seller?.handle}'s policy, before a dispute</div></div>
+      ${status && html`<span class=${"badge " + (status === "RESOLVED" ? "success" : status === "ESCALATED" ? "warning" : "accent")}>${status.toLowerCase()}</span>`}</div>
+    <div class="card-body">
+      <div class="convo" ref=${box} style="max-height:380px">
+        ${!issue && !busy && html`<div class="text-2 sm">Tell us what went wrong. An assistant acting for the seller will propose a fair fix you can accept in one click.</div>`}
+        ${(issue?.transcript || []).map((t, i) => {
+          const mine = t.role === "buyer", seller = t.role === "seller";
+          return html`<div class=${"msg " + (mine ? "mine" : "")} key=${i}>
+            <span class="avatar">${mine ? "You" : seller ? initials(order.seller?.handle) : html`<${Icon} name="sparkles" size=${13} />`}</span>
+            <div><div class="who">${mine ? "You" : seller ? "Seller" : "Resolution assistant"}</div><div class="bubble">${t.text}</div>
+              ${(t.policy_notes || []).map((n, j) => html`<div class="note" key=${j}><${Icon} name="info" size=${12} />${n}</div>`)}
+              ${t.role === "agent" && t.issue_type && html`<div class="agent-meta">${t.issue_type.replaceAll("_", " ")} · dispute risk ${Math.round((t.dispute_risk || 0) * 100)}% · ${t.model}</div>`}</div></div>`;
+        })}
+        ${busy && html`<div class="msg"><span class="avatar"><${Icon} name="sparkles" size=${13} /></span><div class="bubble"><${Spinner} /></div></div>`}
+      </div>
+      ${!issue && html`<div class="suggest" style="margin-top:12px">${starters.map((s) => html`<button key=${s} onClick=${() => setText(s)}>${s}</button>`)}</div>`}
+      ${last?.offer && ["partial_refund", "full_refund"].includes(last.offer.type) && status === "OFFERED" && html`
+        <div class="offer" style="margin-top:14px">
+          <div><b>${usd(last.offer.amount)} back to you</b><div class="xs text-2">${order.status === "HELD" ? "Released from your hold, so it is never charged" : "Refunded to your PayPal account"}</div></div>
+          <button class="btn success" disabled=${busy} onClick=${accept}>Accept offer</button></div>`}
+      ${status === "ESCALATED" && html`<div class="callout warning" style="margin-top:14px"><${Icon} name="inbox" /><div>This needs the seller's decision. They have been notified and can respond from their inbox.</div></div>`}
+      ${status === "RESOLVED" && html`<div class="callout success" style="margin-top:14px"><${Icon} name="checkCircle" /><div><b>Resolved, no dispute needed.</b> ${usd(issue.outcome.amount)} settled on PayPal (${issue.outcome.method}).</div></div>`}
+      ${!done && html`<form class="composer" style="margin-top:14px" onSubmit=${send}>
+        <input class="input" value=${text} onChange=${(e) => setText(e.target.value)} placeholder="Describe the problem" disabled=${busy} aria-label="Describe the problem" />
+        <button class="btn primary" disabled=${busy} aria-label="Send"><${Icon} name="send" /></button></form>`}
+    </div></div>`;
 }
 
 // ---------------- trusted contact ----------------
 function ContactPage({ token }) {
   const [{ data, error }, reload] = useFetch(`/api/contact/${token}`);
   const [busy, setBusy] = useState(false);
-  if (error) return html`<p class="chip bad">${error.message}</p>`;
-  if (!data) return html`<p><span class="spinner"></span></p>`;
+  if (error && !data) return html`<${ErrorBox} error=${error} />`;
+  if (!data) return html`<${Loading} rows=${2} />`;
   const { order: o, risk } = data;
   const vote = async (verdict) => {
     setBusy(true);
-    try { await api(`/api/contact/${token}`, { method: "POST", body: { verdict } }); toast(verdict === "scam" ? "Stopped. The hold was voided." : "Thanks — the payment continues in escrow."); reload(); }
+    try { await api(`/api/contact/${token}`, { method: "POST", body: { verdict } }); toast(verdict === "scam" ? "Payment stopped. The hold was voided." : "Thanks. The payment continues on hold."); reload(); }
     catch (e) { toast(e.message, true); } finally { setBusy(false); }
   };
   const done = o.contact_verdict || !["PAUSED", "HELD"].includes(o.status);
-  return html`<div style="max-width:560px;margin:0 auto">
-    <div class="panel">
-      <div class="tiny muted">📱 Trusted-contact view</div>
-      <h1>Can you double-check a payment?</h1>
-      <p>Someone who listed you as their trusted contact is about to pay <b>${usd(o.amount)}</b> to <b>@${o.seller?.handle}</b> for “${o.listing?.title}”. TrustLayer paused it because:</p>
-      ${(risk.signals || []).slice(0, 4).map((s) => html`<div class="signal" key=${s.key}><span class=${"dot " + (s.strong ? "strong" : "weak")}></span>${s.label}</div>`)}
-      ${risk.ai?.explanation && html`<p class="small muted">${risk.ai.explanation}</p>`}
-      ${done
-        ? html`<div class=${"verdict " + (o.status === "CANCELLED" ? "CLEAR" : "CAUTION")}><div class="head">${o.status === "CANCELLED" ? "🛡️ Payment stopped — no money moved" : "Payment continues in escrow"}</div></div>`
-        : html`<div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
-            <button class="btn danger big" disabled=${busy} onClick=${() => vote("scam")}>This looks like a scam — stop it</button>
-            <button class="btn big" disabled=${busy} onClick=${() => vote("safe")}>I know them — it's fine</button></div>`}
+  return html`<div style="max-width:560px;margin:24px auto 0">
+    <div class="card">
+      <div class="card-body">
+        <div class="feat-ic danger"><${Icon} name="users" size=${22} /></div>
+        <h1 style="font-size:20px;margin:0 0 6px;letter-spacing:-.02em">Can you double-check a payment?</h1>
+        <p class="text-2" style="margin:0">You were added as a trusted contact. They are about to pay <b>${usd(o.amount)}</b> to <b>@${o.seller?.handle}</b> for "${o.listing?.title}". TrustLayer paused it because:</p>
+      </div>
+      <div class="section"><${Signals} risk=${risk} />${risk.ai?.explanation && html`<p class="sm text-2" style="margin:8px 0 0">${risk.ai.explanation}</p>`}</div>
+      <div class="section">
+        ${done ? html`<div class=${"callout " + (o.status === "CANCELLED" ? "success" : "info")}><${Icon} name=${o.status === "CANCELLED" ? "shieldCheck" : "info"} />
+            <div>${o.status === "CANCELLED" ? "Payment stopped. No money moved." : "Thanks. The payment stays on hold until delivery."}</div></div>`
+          : html`<div class="grid cols-2" style="gap:8px">
+            <button class="btn danger lg" disabled=${busy} onClick=${() => vote("scam")}>Stop this payment</button>
+            <button class="btn lg" disabled=${busy} onClick=${() => vote("safe")}>It's fine, I know them</button></div>`}
+      </div>
     </div></div>`;
 }
 
 // ---------------- seller health ----------------
-function Ring({ score, size = 96 }) {
-  const r = 40, c = 2 * Math.PI * r, color = score >= 80 ? "var(--ok)" : score >= 60 ? "#e3a008" : "var(--bad)";
-  return html`<svg class="ring" viewBox="0 0 100 100" style=${{ width: size, height: size }} role="img" aria-label=${"Health score " + score}>
-    <circle cx="50" cy="50" r=${r} fill="none" stroke="var(--chip)" stroke-width="10" />
-    <circle cx="50" cy="50" r=${r} fill="none" stroke=${color} stroke-width="10" stroke-linecap="round" stroke-dasharray=${`${(score / 100) * c} ${c}`} transform="rotate(-90 50 50)" />
-    <text x="50" y="57" text-anchor="middle" font-size="24" font-weight="800" fill="var(--ink)">${score}</text></svg>`;
+function Score({ score, size = 88 }) {
+  const r = 38, c = 2 * Math.PI * r, color = score >= 80 ? "var(--success-solid)" : score >= 60 ? "var(--warning-solid)" : "var(--danger-solid)";
+  return html`<div class="score" style=${{ width: size, height: size }}><svg viewBox="0 0 88 88" width=${size} height=${size} role="img" aria-label=${"Health score " + score}>
+    <circle cx="44" cy="44" r=${r} fill="none" stroke="var(--border)" stroke-width="8" />
+    <circle cx="44" cy="44" r=${r} fill="none" stroke=${color} stroke-width="8" stroke-linecap="round" stroke-dasharray=${`${(score / 100) * c} ${c}`} transform="rotate(-90 44 44)" /></svg>
+    <span class="n" style=${{ fontSize: size < 60 ? "15px" : "24px" }}>${score}</span></div>`;
 }
-const statusChip = (s) => html`<span class=${"chip " + (s === "Healthy" ? "ok" : s === "Watch" ? "warn" : "bad")}>${s}</span>`;
+const HealthBadge = ({ s }) => html`<span class=${"badge " + (s === "Healthy" ? "success" : s === "Watch" ? "warning" : "danger")}><span class="dot"></span>${s}</span>`;
 
 function SellersPage() {
   const [{ data, loading }] = useFetch("/api/sellers");
-  return html`<h1>Seller account health</h1>
-    <p class="sub">Holds and limitations usually arrive without warning. TrustLayer watches the public signals that trigger reviews and explains them before they bite.</p>
-    ${loading && html`<p><span class="spinner"></span></p>`}
-    <div class="grid cards">${(data || []).map((s) => html`
-      <a class="panel card row" href=${"#/sellers/" + s.seller.id} key=${s.seller.id} style="gap:14px">
-        <${Ring} score=${s.score} size=${72} />
-        <div><b>${s.seller.name}</b><div class="tiny muted">@${s.seller.handle} · ${s.kpis.transactions_30d} sales / 30d</div>
-          <div class="row" style="margin-top:6px">${statusChip(s.status)}<span class="chip">disputes ${s.kpis.dispute_rate}%</span></div></div>
-      </a>`)}</div>`;
+  return html`<${PageHead} title="Seller health" sub="Holds and limitations usually arrive without warning. TrustLayer tracks the public signals that trigger account reviews and explains them early." />
+    ${loading ? html`<${Loading} />` : html`<div class="card table-wrap"><table class="table">
+      <thead><tr><th>Seller</th><th>Health</th><th style="text-align:right">Sales (30d)</th><th style="text-align:right">Dispute rate</th><th style="text-align:right">Refund rate</th><th style="text-align:right">Disputes avoided</th><th>Open cases</th><th></th></tr></thead>
+      <tbody>${data.map((s) => html`<tr class="click" key=${s.seller.id} onClick=${() => go("/sellers/" + s.seller.id)}>
+        <td><div class="row" style="gap:12px"><span class="avatar lg">${initials(s.seller.name)}</span><div><div class="cell-main">${s.seller.name}</div><div class="cell-sub">@${s.seller.handle}</div></div></div></td>
+        <td><div class="row" style="gap:10px"><${Score} score=${s.score} size=${40} /><${HealthBadge} s=${s.status} /></div></td>
+        <td class="num" style="text-align:right">${s.kpis.transactions_30d}</td>
+        <td class="num" style=${{ textAlign: "right", color: s.kpis.dispute_rate >= s.thresholds.dispute_line ? "var(--danger)" : "inherit", fontWeight: 500 }}>${s.kpis.dispute_rate.toFixed(2)}%</td>
+        <td class="num" style="text-align:right">${s.kpis.refund_rate.toFixed(1)}%</td>
+        <td class="num" style="text-align:right">${s.kpis.prevented_30d}</td>
+        <td>${s.open_cases > 0 ? html`<span class="badge warning">${s.open_cases} waiting</span>` : html`<span class="text-3">None</span>`}</td>
+        <td><${Icon} name="chevronRight" cls="text-3" /></td></tr>`)}</tbody></table></div>`}`;
+}
+
+function SellerInbox({ id, onChange }) {
+  const [{ data }, reload] = useFetch(`/api/sellers/${id}/issues`);
+  const [amount, setAmount] = useState({});
+  const [busy, setBusy] = useState(null);
+  const open = (data || []).filter((i) => i.status === "ESCALATED");
+  if (!open.length) return null;
+  const decide = async (iss, action) => {
+    setBusy(iss.id);
+    try {
+      await api(`/api/issues/${iss.id}/seller-decision`, { method: "POST", body: { action, amount: Number(amount[iss.id] || 0) } });
+      toast(action === "refund" ? "Refund sent on PayPal." : "Case declined."); reload(); onChange && onChange();
+    } catch (e) { toast(e.message, true); } finally { setBusy(null); }
+  };
+  return html`<div class="card" style="border-color:var(--warning-border)">
+    <div class="card-head"><div><h2>Seller inbox</h2><div class="sub">Cases the assistant could not settle within your policy</div></div><span class="badge warning">${open.length} waiting</span></div>
+    ${open.map((iss) => {
+      const lastBuyer = iss.transcript.filter((t) => t.role === "buyer").slice(-1)[0];
+      return html`<div class="section" key=${iss.id}>
+        <div class="row spread"><div><div class="cell-main">${iss.order.listing?.title}</div><div class="cell-sub mono">${iss.order.id} · ${usd(iss.order.amount)}</div></div><${StatusBadge} status=${iss.order.status} /></div>
+        <div style="margin:10px 0;background:var(--subtle);border:1px solid var(--border);border-radius:10px;padding:10px 12px">"${lastBuyer?.text}"</div>
+        <div class="row">
+          <input class="input" type="number" min="0" step="0.01" style="width:140px" placeholder="Refund amount" value=${amount[iss.id] || ""} onChange=${(e) => setAmount({ ...amount, [iss.id]: e.target.value })} />
+          <button class="btn primary sm" disabled=${busy === iss.id || !(Number(amount[iss.id]) > 0)} onClick=${() => decide(iss, "refund")}>Send refund</button>
+          <button class="btn sm" disabled=${busy === iss.id} onClick=${() => decide(iss, "decline")}>Decline</button>
+        </div></div>`;
+    })}</div>`;
 }
 
 function SellerPage({ id }) {
-  const [{ data: m, error }] = useFetch(`/api/sellers/${id}/health`);
+  const [{ data: m, error }, reload] = useFetch(`/api/sellers/${id}/health`);
   const [{ data: ex, loading: exLoading }] = useFetch(`/api/sellers/${id}/explain`);
-  if (error) return html`<p class="chip bad">${error.message}</p>`;
-  if (!m) return html`<p><span class="spinner"></span></p>`;
+  if (error && !m) return html`<${ErrorBox} error=${error} />`;
+  if (!m) return html`<${Loading} rows=${3} />`;
   const k = m.kpis, max = Math.max(1, ...m.series.map((d) => d.orders));
-  const scaleMax = Math.max(2.5, k.dispute_rate_without_prevention + 0.3);
+  const scaleMax = Math.max(2.5, k.dispute_rate_without_prevention + 0.4);
   const pct = (v) => `${Math.min(100, (v / scaleMax) * 100)}%`;
+  const over = k.dispute_rate >= m.thresholds.dispute_line;
   return html`
-    <p class="small"><a href="#/sellers">← All sellers</a></p>
-    <div class="panel row" style="gap:20px;margin-bottom:16px">
-      <${Ring} score=${m.score} />
-      <div style="flex:1;min-width:240px">
-        <div class="row">${statusChip(m.status)}<span class="tiny muted">@${m.seller.handle} · joined ${m.seller.joined_days_ago} days ago</span></div>
-        <h1 style="margin-top:4px">${m.seller.name}</h1>
-        ${exLoading ? html`<p class="small"><span class="spinner"></span> Writing a plain-English explanation…</p>`
-          : ex && html`<p style="margin:4px 0 0"><b>${ex.headline}</b> ${ex.summary}</p>`}
+    <${Back} to="#/sellers" label="Seller health" />
+    <div class="card" style="margin-bottom:16px"><div class="card-body row" style="gap:20px;align-items:flex-start;flex-wrap:nowrap">
+      <${Score} score=${m.score} />
+      <div style="flex:1;min-width:0">
+        <div class="row"><h1 style="font-size:22px;margin:0;letter-spacing:-.02em">${m.seller.name}</h1><${HealthBadge} s=${m.status} /></div>
+        <div class="xs text-2" style="margin-top:2px">@${m.seller.handle} · member for ${m.seller.joined_days_ago} days · ${m.seller.location}</div>
+        ${exLoading ? html`<div class="skeleton" style="height:40px;margin-top:12px"></div>` : ex && html`<p style="margin:12px 0 0"><b>${ex.headline}</b> <span class="text-2">${ex.summary}</span></p>`}
+      </div></div></div>
+    <div class="stack">
+      <${SellerInbox} id=${id} onChange=${reload} />
+      <div class="card grid cols-stats" style="gap:0">
+        ${[["Sales, 30 days", k.transactions_30d, ""], ["Dispute rate", k.dispute_rate.toFixed(2) + "%", `Line at ${m.thresholds.dispute_line}%`],
+           ["Disputes avoided", k.prevented_30d, "by early resolution"], ["Refund rate", k.refund_rate.toFixed(1) + "%", ""],
+           ["This week vs baseline", (k.volume_spike_x ?? "–") + "×", "sales velocity"], ["Gross, 30 days", usd0(k.gross_30d), ""]]
+          .map(([l, v, hint], i) => html`<div class="stat" key=${i} style=${{ borderLeft: i ? "1px solid var(--border)" : "0" }}>
+            <div class="l">${l}</div><div class="v" style=${{ color: l === "Dispute rate" && over ? "var(--danger)" : "inherit" }}>${v}</div>${hint && html`<div class="h">${hint}</div>`}</div>`)}
       </div>
-    </div>
-    <div class="grid kpis" style="margin-bottom:16px">
-      <div class="kpi"><div class="v">${k.transactions_30d}</div><div class="l">sales, last 30 days</div></div>
-      <div class="kpi"><div class="v" style=${{ color: k.dispute_rate >= m.thresholds.dispute_line ? "var(--bad)" : "inherit" }}>${k.dispute_rate}%</div><div class="l">dispute rate</div></div>
-      <div class="kpi"><div class="v" style="color:var(--ok)">${k.prevented_30d}</div><div class="l">disputes avoided</div></div>
-      <div class="kpi"><div class="v">${k.refund_rate}%</div><div class="l">refund rate</div></div>
-      <div class="kpi"><div class="v">${k.volume_spike_x ?? "–"}×</div><div class="l">this week vs baseline</div></div>
-      <div class="kpi"><div class="v">${usd(k.gross_30d).replace(".00", "")}</div><div class="l">gross, 30 days</div></div>
-    </div>
-    <div class="grid two">
-      <div class="grid">
-        <div class="panel">
-          <h2>Dispute rate vs the ${m.thresholds.dispute_line}% monitoring line</h2>
-          <div class="small muted">Now</div>
-          <div class="bar"><div class="fill" style=${{ width: pct(k.dispute_rate), background: k.dispute_rate >= m.thresholds.dispute_line ? "var(--bad)" : "var(--brand)" }}></div>
-            <div class="line" style=${{ left: pct(m.thresholds.dispute_line) }}><span>${m.thresholds.dispute_line}% line</span></div></div>
-          <div class="small muted" style="margin-top:14px">Without TrustLayer's early resolution</div>
-          <div class="bar"><div class="fill" style=${{ width: pct(k.dispute_rate_without_prevention), background: "#c7d2e2" }}></div>
-            <div class="line" style=${{ left: pct(m.thresholds.dispute_line) }}></div></div>
-          <p class="tiny muted">Card networks (e.g. Visa's VAMP program) flag merchants above this ratio. TrustLayer can't see PayPal's internal models; these are the public signals.</p>
+      <div class="grid cols-2">
+        <div class="stack">
+          <div class="card"><div class="card-head"><div><h2>Dispute rate against the monitoring line</h2><div class="sub">Card networks such as Visa (VAMP) flag merchants above ${m.thresholds.dispute_line}%</div></div></div>
+            <div class="card-body">
+              <div class="row spread sm"><span class="text-2">Current</span><b class="num" style=${{ color: over ? "var(--danger)" : "inherit" }}>${k.dispute_rate.toFixed(2)}%</b></div>
+              <div class="gauge"><div class="fill" style=${{ width: pct(k.dispute_rate), background: over ? "var(--danger-solid)" : "var(--accent)" }}></div>
+                <div class="mark" style=${{ left: pct(m.thresholds.dispute_line) }}><span>${m.thresholds.dispute_line}%</span></div></div>
+              <div class="row spread sm" style="margin-top:18px"><span class="text-2">Without early resolution</span><b class="num">${k.dispute_rate_without_prevention.toFixed(2)}%</b></div>
+              <div class="gauge" style="margin-top:10px"><div class="fill" style=${{ width: pct(k.dispute_rate_without_prevention), background: "var(--border-strong)" }}></div>
+                <div class="mark" style=${{ left: pct(m.thresholds.dispute_line) }}></div></div>
+              <p class="xs text-3" style="margin:14px 0 0">TrustLayer does not see PayPal's internal risk models. These are the public signals that commonly trigger reviews.</p>
+            </div></div>
+          <div class="card"><div class="card-head"><div><h2>Daily sales</h2><div class="sub">Last 30 days · markers show days with disputes</div></div></div>
+            <div class="card-body">
+              <svg viewBox="0 0 300 120" preserveAspectRatio="none" style="width:100%;height:160px;display:block" role="img" aria-label="Daily sales over the last 30 days">
+                ${[0.25, 0.5, 0.75].map((f) => html`<line key=${f} x1="0" x2="300" y1=${108 - f * 96} y2=${108 - f * 96} stroke="var(--border)" stroke-dasharray="2 3" stroke-width="0.6" />`)}
+                ${m.series.map((d, i) => { const hgt = (d.orders / max) * 96; return html`<g key=${i}>
+                  <rect x=${i * 10 + 1.5} y=${108 - hgt} width="7" height=${hgt} rx="1.5" fill=${i >= 23 ? "var(--accent)" : "#b2ccff"}><title>${d.orders} sales, ${d.disputes} disputes</title></rect>
+                  ${d.disputes > 0 && html`<rect x=${i * 10 + 3} y=${112} width="4" height="4" rx="1" fill="var(--danger-solid)" />`}</g>`; })}
+              </svg>
+              <div class="row xs text-2" style="margin-top:8px;gap:16px"><span class="row" style="gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#b2ccff"></span>Prior weeks</span>
+                <span class="row" style="gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:var(--accent)"></span>Last 7 days</span>
+                <span class="row" style="gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:var(--danger-solid)"></span>Dispute filed</span></div>
+            </div></div>
         </div>
-        <div class="panel">
-          <h2>Daily sales, last 30 days</h2>
-          <svg viewBox="0 0 300 110" preserveAspectRatio="none" style="width:100%;height:150px" role="img" aria-label="Daily sales chart">
-            ${m.series.map((d, i) => { const h = (d.orders / max) * 90; return html`<g key=${i}>
-              <rect x=${i * 10 + 1} y=${100 - h} width="8" height=${h} rx="2" fill=${i >= 23 ? "var(--brand)" : "#b9cbe6"}><title>${d.orders} sales, ${d.disputes} disputes</title></rect>
-              ${d.disputes > 0 && html`<circle cx=${i * 10 + 5} cy=${100 - h - 6} r="3" fill="var(--bad)" />`}</g>`; })}
-            <line x1="0" y1="100" x2="300" y2="100" stroke="var(--line)" />
-          </svg>
-          <div class="tiny muted">Dark bars = last 7 days · red dots = days with disputes</div>
+        <div class="stack">
+          <div class="card"><div class="card-head"><h2>Findings</h2></div><div class="card-body">
+            ${m.findings.length === 0 && html`<div class="text-2">No warning signs.</div>`}
+            ${m.findings.map((f, i) => html`<div class="finding" key=${i}>
+              <span class=${"ic " + ({ high: "danger", medium: "warning", good: "success", info: "accent" }[f.level])} style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none">
+                <${Icon} name=${{ high: "alert", medium: "alert", good: "checkCircle", info: "info" }[f.level]} size=${14} /></span>
+              <div><div style="font-weight:500">${f.title}</div><div class="sm text-2">${f.detail}</div></div></div>`)}
+          </div></div>
+          ${ex?.actions?.length > 0 && html`<div class="card"><div class="card-head"><h2>Recommended next steps</h2></div><div class="card-body">
+            <ol class="actions">${ex.actions.map((a, i) => html`<li key=${i}>${a}</li>`)}</ol>
+            <div class="model-line" style="margin-top:12px"><${Icon} name="sparkles" size=${12} />Written by ${ex.model}</div></div></div>`}
         </div>
-      </div>
-      <div class="grid">
-        <div class="panel"><h2>What we found</h2>
-          ${m.findings.length === 0 && html`<p class="muted">No warning signs.</p>`}
-          ${m.findings.map((f, i) => html`<div class="finding" key=${i}><span class=${"lvl " + f.level}></span><div><b>${f.title}</b><div class="small muted">${f.detail}</div></div></div>`)}
-        </div>
-        ${ex?.actions?.length > 0 && html`<div class="panel"><h2>Do this next</h2><ol style="margin:0;padding-left:20px">${ex.actions.map((a, i) => html`<li key=${i} style="margin:6px 0">${a}</li>`)}</ol>
-          <div class="tiny muted" style="margin-top:8px">Written by ${ex.model} via ${ex.provider}</div></div>`}
       </div>
     </div>`;
 }
 
-// ---------------- ledger ----------------
+// ---------------- audit log ----------------
 function LedgerPage() {
-  const [{ data }, reload] = useFetch("/api/ledger");
+  const [{ data, loading }, reload] = useFetch("/api/ledger");
   const [busy, setBusy] = useState(false);
-  const tamper = async () => { setBusy(true); try { const r = await api("/api/ledger/tamper", { method: "POST" }); toast(`Edited record #${r.tampered_seq} behind the app's back…`); reload(); } finally { setBusy(false); } };
-  const reset = async () => { if (!confirm("Reset all demo data (orders, ledger)?")) return; await api("/api/admin/reset", { method: "POST" }); toast("Demo data reset."); reload(); };
+  const tamper = async () => { setBusy(true); try { const r = await api("/api/ledger/tamper", { method: "POST" }); toast(`Record #${r.tampered_seq} was edited directly in the database.`); await reload(); } catch (e) { toast(e.message, true); } finally { setBusy(false); } };
+  const reset = async () => { if (!confirm("Reset all demo data, including orders and the audit log?")) return; await api("/api/admin/reset", { method: "POST" }); toast("Demo data reset."); reload(); };
   const v = data?.verify;
-  return html`<h1>Ledger</h1><p class="sub">Every PayPal money movement and every AI decision, SHA-256 hash-chained. Edit any record and verification names the break.</p>
-    <div class="panel row between" style="margin-bottom:16px">
-      <div class="row">${v && (v.ok ? html`<span class="chip ok">✓ Chain intact · ${v.count} records</span>` : html`<span class="chip bad">✗ Tampering detected at record #${v.broken_at} (${v.type})</span>`)}</div>
-      <div class="row"><button class="btn" onClick=${reload}>Verify</button><button class="btn" disabled=${busy} onClick=${tamper}>Tamper with a record (demo)</button><button class="btn ghost" onClick=${reset}>Reset demo</button></div>
-    </div>
-    <div class="panel tablewrap"><table>
-      <thead><tr><th>#</th><th>Event</th><th>Order</th><th>Details</th><th>Hash</th></tr></thead>
-      <tbody>${(data?.events || []).map((e) => html`<tr key=${e.seq} style=${{ background: v && !v.ok && e.seq === v.broken_at ? "var(--bad-soft)" : "" }}>
-        <td class="mono">${e.seq}</td><td><b>${e.type}</b><div class="tiny muted">${ago(e.ts)}</div></td>
-        <td class="mono">${e.order_id ? html`<a href=${"#/order/" + e.order_id}>${e.order_id}</a>` : e.seller_id || ""}</td>
-        <td class="tiny mono">${Object.entries(e.data || {}).filter(([, x]) => x !== null && typeof x !== "object").slice(0, 5).map(([a, b]) => `${a}=${b}`).join("  ")}</td>
-        <td class="mono tiny">${e.hash.slice(0, 12)}…</td></tr>`)}</tbody></table></div>`;
+  return html`<${PageHead} title="Audit log" sub="Every PayPal call and every AI decision, in an append-only SHA-256 hash chain. Changing any record breaks the chain at that point."
+      right=${html`<div class="row"><button class="btn sm" onClick=${reload}><${Icon} name="refresh" size=${14} />Verify chain</button>
+        <button class="btn sm" disabled=${busy} onClick=${tamper}>Simulate tampering</button><button class="btn sm ghost" onClick=${reset}>Reset demo</button></div>`} />
+    ${v && html`<div class=${"callout " + (v.ok ? "success" : "danger")} style="margin-bottom:16px">
+      <${Icon} name=${v.ok ? "shieldCheck" : "shieldAlert"} />
+      <div>${v.ok ? html`<b>Chain verified.</b> ${v.count} records, head <span class="mono">${v.head?.slice(0, 16)}…</span>`
+        : html`<b>Tampering detected at record #${v.broken_at}</b> (${v.type}). Every record after it can no longer be trusted.`}</div></div>`}
+    ${loading ? html`<${Loading} />` : html`<div class="card table-wrap"><table class="table">
+      <thead><tr><th>#</th><th>Event</th><th>Reference</th><th>Details</th><th>Hash</th><th>Time</th></tr></thead>
+      <tbody>${(data?.events || []).map((e) => html`<tr key=${e.seq} class=${v && !v.ok && e.seq === v.broken_at ? "bad" : ""}>
+        <td class="mono text-2">${e.seq}</td><td class="cell-main">${e.type}</td>
+        <td class="mono">${e.order_id ? html`<a href=${"#/order/" + e.order_id}>${e.order_id}</a>` : html`<span class="text-2">${e.seller_id || "system"}</span>`}</td>
+        <td class="xs text-2 mono" style="max-width:420px">${Object.entries(e.data || {}).filter(([, x]) => x !== null && typeof x !== "object").slice(0, 4).map(([a, b]) => `${a}=${b}`).join("  ")}</td>
+        <td class="mono xs text-3">${e.hash.slice(0, 10)}</td><td class="xs text-2" style="white-space:nowrap">${clock(e.ts)}</td></tr>`)}</tbody></table></div>`}`;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);

@@ -164,3 +164,52 @@ def create_payout(receiver_email: str, amount: float, order_ref: str, note: str)
 
 def get_payout(batch_id: str) -> dict:
     return _call("GET", f"/v1/payments/payouts/{batch_id}", "get_payout")
+
+
+def reauthorize(authorization_id: str, amount: float, order_ref: str) -> dict:
+    """After the 3-day honor period an authorization must be reauthorized before capture."""
+    return _call("POST", f"/v2/payments/authorizations/{authorization_id}/reauthorize", "reauthorize",
+                 {"amount": _money(amount)}, request_id=f"{order_ref}-reauth-{int(time.time() // 86400)}")
+
+
+# ---------- Webhooks ----------
+
+WEBHOOK_EVENTS = [
+    "CHECKOUT.ORDER.APPROVED",
+    "PAYMENT.AUTHORIZATION.CREATED", "PAYMENT.AUTHORIZATION.VOIDED",
+    "PAYMENT.CAPTURE.COMPLETED", "PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.REFUNDED",
+    "PAYMENT.PAYOUTSBATCH.SUCCESS", "PAYMENT.PAYOUTSBATCH.DENIED",
+    "PAYMENT.PAYOUTS-ITEM.SUCCEEDED", "PAYMENT.PAYOUTS-ITEM.UNCLAIMED", "PAYMENT.PAYOUTS-ITEM.FAILED",
+    "PAYMENT.PAYOUTS-ITEM.BLOCKED", "PAYMENT.PAYOUTS-ITEM.RETURNED",
+    "CUSTOMER.DISPUTE.CREATED",
+]
+
+
+def verify_webhook(headers: dict, event: dict, webhook_id: str) -> bool:
+    """Ask PayPal to verify the transmission signature of an incoming webhook."""
+    h = {k.lower(): v for k, v in headers.items()}
+    body = {
+        "auth_algo": h.get("paypal-auth-algo"), "cert_url": h.get("paypal-cert-url"),
+        "transmission_id": h.get("paypal-transmission-id"), "transmission_sig": h.get("paypal-transmission-sig"),
+        "transmission_time": h.get("paypal-transmission-time"), "webhook_id": webhook_id, "webhook_event": event,
+    }
+    if not all(body[k] for k in ("auth_algo", "cert_url", "transmission_id", "transmission_sig", "transmission_time")):
+        return False
+    res = _call("POST", "/v1/notifications/verify-webhook-signature", "verify_webhook", body)
+    return res.get("verification_status") == "SUCCESS"
+
+
+def create_webhook(url: str) -> dict:
+    return _call("POST", "/v1/notifications/webhooks", "create_webhook",
+                 {"url": url, "event_types": [{"name": n} for n in WEBHOOK_EVENTS]})
+
+
+def list_webhooks() -> dict:
+    return _call("GET", "/v1/notifications/webhooks", "list_webhooks")
+
+
+def issue_of(err: "PayPalError") -> str:
+    """First PayPal error 'issue' code, e.g. INSTRUMENT_DECLINED or AUTHORIZATION_EXPIRED."""
+    body = err.body if isinstance(err.body, dict) else {}
+    details = body.get("details") or [{}]
+    return (details[0] or {}).get("issue") or body.get("name") or ""

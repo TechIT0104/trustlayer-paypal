@@ -145,11 +145,16 @@ def _turn(issue: dict, o: dict) -> dict:
             "severity": d.get("severity"), "sentiment": d.get("buyer_sentiment"), "dispute_risk": dispute_risk,
             "provider": res["provider"], "model": res["model"], "latency_ms": res["latency_ms"], "ts": time.time()}
     transcript.append(turn)
+    status = ("OFFERED" if offer["type"] in ("partial_refund", "full_refund")
+              else "ESCALATED" if offer["type"] in ("escalate", "replacement") else "OPEN")
     db.update("issues", "id", issue["id"], transcript_json=json.dumps(transcript), offer_json=json.dumps(offer),
-              status="OFFERED" if offer["type"] in ("partial_refund", "full_refund") else "OPEN")
+              status=status)
     ledger.append("resolution.turn", {"issue_id": issue["id"], "issue_type": itype, "offer": offer,
                                       "policy_adjustments": notes, "dispute_risk": dispute_risk,
                                       "provider": res["provider"]}, order_id=o["id"], seller_id=o["seller_id"])
+    if status == "ESCALATED" and issue["status"] != "ESCALATED":
+        ledger.append("resolution.escalated", {"issue_id": issue["id"], "reason": offer.get("reason", "")},
+                      order_id=o["id"], seller_id=o["seller_id"])
     return turn
 
 
@@ -157,8 +162,8 @@ def message(order_id: str, text: str) -> dict:
     o = orders.get(order_id)
     if o["status"] not in ("HELD", "CAPTURED", "PAID_OUT"):
         raise orders.OrderError(f"no problem can be reported for an order that is {o['status']}")
-    issue = db.one("SELECT * FROM issues WHERE order_id = ? AND status IN ('OPEN','OFFERED') ORDER BY created_at DESC LIMIT 1",
-                   (order_id,))
+    issue = db.one("SELECT * FROM issues WHERE order_id = ? AND status IN ('OPEN','OFFERED','ESCALATED') "
+                   "ORDER BY created_at DESC LIMIT 1", (order_id,))
     now = time.time()
     if not issue:
         iid = "IS-" + uuid.uuid4().hex[:6].upper()
@@ -179,6 +184,12 @@ def message(order_id: str, text: str) -> dict:
     return get_issue(issue["id"])
 
 
+def seller_issues(seller_id: str) -> list[dict]:
+    rows = db.all("SELECT i.id FROM issues i JOIN orders o ON o.id = i.order_id WHERE o.seller_id = ? "
+                  "ORDER BY i.updated_at DESC", (seller_id,))
+    return [get_issue(r["id"]) for r in rows]
+
+
 def get_issue(issue_id: str) -> dict:
     issue = db.one("SELECT * FROM issues WHERE id = ?", (issue_id,))
     if not issue:
@@ -197,10 +208,41 @@ def accept(issue_id: str) -> dict:
     if issue["status"] == "RESOLVED":
         return get_issue(issue_id)
     offer = db.loads(issue["offer_json"], {}) or {}
-    if offer.get("type") not in ("partial_refund", "full_refund") or offer.get("amount", 0) <= 0:
+    if issue["status"] != "OFFERED" or offer.get("type") not in ("partial_refund", "full_refund") or offer.get("amount", 0) <= 0:
         raise orders.OrderError("there is no money offer to accept")
+    return _settle(issue, round(float(offer["amount"]), 2), by="buyer_accepted_offer")
+
+
+def seller_decision(issue_id: str, action: str, amount: float = 0.0) -> dict:
+    """The seller resolves an escalated case: send a refund of their choosing, or decline."""
+    issue = db.one("SELECT * FROM issues WHERE id = ?", (issue_id,))
+    if not issue:
+        raise orders.OrderError("issue not found", 404)
+    if issue["status"] != "ESCALATED":
+        raise orders.OrderError(f"case is {issue['status'].lower()}, not waiting for the seller")
     o = orders.get(issue["order_id"])
-    amount = round(float(offer["amount"]), 2)
+    transcript = db.loads(issue["transcript_json"], [])
+    if action == "decline":
+        transcript.append({"role": "seller", "text": "The seller reviewed your case and declined a refund. "
+                           "You can still contact PayPal if you disagree.", "ts": time.time()})
+        db.update("issues", "id", issue_id, status="DECLINED", transcript_json=json.dumps(transcript))
+        ledger.append("resolution.declined", {"issue_id": issue_id}, order_id=o["id"], seller_id=o["seller_id"])
+        return get_issue(issue_id)
+    if action != "refund":
+        raise orders.OrderError("action must be refund or decline")
+    remaining = round(o["amount"] - (o["refunded_amount"] or 0), 2)
+    amount = round(float(amount), 2)
+    if not 0 < amount <= remaining:
+        raise orders.OrderError(f"refund must be between $0.01 and ${remaining:.2f}")
+    transcript.append({"role": "seller", "text": f"I've reviewed this and sent you ${amount:.2f}. Sorry for the trouble.",
+                       "ts": time.time()})
+    db.update("issues", "id", issue_id, transcript_json=json.dumps(transcript))
+    return _settle(db.one("SELECT * FROM issues WHERE id = ?", (issue_id,)), amount, by="seller_decision")
+
+
+def _settle(issue: dict, amount: float, by: str) -> dict:
+    issue_id = issue["id"]
+    o = orders.get(issue["order_id"])
     if o["status"] == "HELD":
         keep = round(o["amount"] - amount, 2)
         if keep <= 0:
@@ -215,10 +257,13 @@ def accept(issue_id: str) -> dict:
         res = paypal.refund_capture(o["capture_id"], amount, o["id"], note="Resolved with the seller via TrustLayer")
         ref_id = res.get("id")
         db.update("orders", "id", o["id"], refunded_amount=round((o["refunded_amount"] or 0) + amount, 2))
+        ledger.append("payment.refunded", {"refund_id": ref_id, "amount": amount, "status": res.get("status"),
+                                           "capture_id": o["capture_id"]}, order_id=o["id"], seller_id=o["seller_id"])
         method = f"PayPal refund {ref_id}"
     else:
         raise orders.OrderError(f"cannot settle an order that is {o['status']}")
-    outcome = {"amount": amount, "method": method, "refund_id": ref_id, "dispute_avoided": True, "ts": time.time()}
+    outcome = {"amount": amount, "method": method, "refund_id": ref_id, "dispute_avoided": True,
+               "settled_by": by, "ts": time.time()}
     db.update("issues", "id", issue_id, status="RESOLVED", outcome_json=json.dumps(outcome))
     day = 0
     db.run("INSERT INTO seller_daily (seller_id, day, orders, disputes, refunds, gross, prevented) VALUES (?,?,0,0,1,0,1)"

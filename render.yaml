@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: trustlayer
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/config
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DB_PATH
+        value: /tmp/trustlayer.db
+      - key: LLM_PROVIDERS
+        value: groq,gemini
+      - key: COOLING_OFF_SECONDS
+        value: "120"
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SANDBOX_BUYER2_EMAIL
+        sync: false

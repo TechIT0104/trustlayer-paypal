@@ -111,7 +111,21 @@ Production details that are handled, not hand-waved:
 ## Evaluation (honest numbers)
 
 <!-- EVAL:START -->
-_Run `python eval/run_eval.py`; results land in `eval/results/summary.json` and [NUMBERS.md](NUMBERS.md)._
+Held-out **test set: 80 marketplace chats** (40 scams across 10 tactics, 40 honest,
+including traps such as sellers warning *against* Friends & Family), generated only after every rule, prompt and model
+change was final. Nothing was tuned on it.
+
+| Detector | Scams paused (recall) | Precision | Honest buyers wrongly paused | Honest buyers shown any warning | Scams with no warning at all | F1 |
+|---|---|---|---|---|---|---|
+| Rules only | 22.5% (9/40) | 100% | 0% (0/40) | 15% | 20% | 0.37 |
+| LLM only (grounded quotes) | 97.5% (39/40) | 97.5% | 2.5% (1/40) | 2.5% | 2.5% | 0.97 |
+| Local fine-tuned model only | 90% (36/40) | 90% | 10% (4/40) | 55% | 0% | 0.90 |
+| Rules + local model (LLM outage mode) | 82.5% (33/40) | 97.1% | 2.5% (1/40) | 37.5% | 0% | 0.89 |
+| **TrustLayer (rules + LLM + local model)** | 97.5% (39/40) | 97.5% | 2.5% (1/40) | 2.5% | 2.5% | 0.97 |
+
+- Scam **tactic named correctly** on 52.5% of scams · LLM p50 1506 ms / p95 3029 ms
+- 0 AI-cited quotes were not in the chat and were discarded by the grounding check
+- Method, the dev-set numbers, every miss, and the fine-tuned model's results: [NUMBERS.md](NUMBERS.md)
 <!-- EVAL:END -->
 
 ## The fine-tuned local model

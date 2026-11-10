@@ -19,7 +19,10 @@ def load(split: str):
 
 
 def pct(x) -> str:
-    return "–" if x is None else f"{100 * x:.0f}%"
+    if x is None:
+        return "–"
+    s = f"{100 * x:.1f}".rstrip("0").rstrip(".")  # 97.5% stays 97.5%, 100.0% becomes 100%
+    return s + "%"
 
 
 def row(name: str, m: dict | None) -> str:
@@ -49,10 +52,28 @@ if not test:
 
 lat = test["llm_latency_ms"]
 misses = [p for p in test_per if (p["fused"] == "PAUSE") != (p["label"] == "scam")]
+# Human analysis of each test error, written after scoring. The engine was NOT changed in response (test stays clean).
+TEST_NOTES = {
+    "Ts003": "The seller proposes the 'Send Money' personal option to skip fees; the buyer refuses and pays through "
+             "checkout. The LLM quoted the right line but scored it 0.2 (the buyer declined), and when the LLM cites "
+             "evidence the fusion trusts its score over the local model (p=0.95). No regex matched this wording. "
+             "Arguably no money was at risk, but a CAUTION would be better. Candidate fix, to be tuned on dev only: let a "
+             "confident local model lift a grounded-but-low LLM score to CAUTION.",
+    "Tl048": "An honest seller in a hurry; the LLM read the pressure as a scam tactic and grounded it in a real quote. "
+             "This is the documented failure mode of LLM scam detectors (urgency language); the cooling-off design "
+             "limits the cost: the buyer can still pay, with a short hold.",
+}
 miss_lines = "\n".join(
     f"- `{p['id']}` {p['label']} / {p['type']}: fused={p['fused']} (rules={p['rules']}, llm={p['llm']}, "
     f"model p={p.get('p_model')}, ai tactic={p['ai_type']}, rule signals={', '.join(p['rule_keys']) or 'none'})"
+    + (f"\n  - *Analysis:* {TEST_NOTES[p['id']]}" if p["id"] in TEST_NOTES else "")
     for p in misses) or "- none"
+dev_noise = """
+### Dev-set errors: mostly label noise from the generator
+Three of the four dev errors are chats the generator *labelled* honest but whose text is genuinely risky: the seller
+sends their own "checkout link" (l059, l064), or asks for payment before a local-pickup inspection (l062). One "scam"
+(s040) contains no scam at all. We report the numbers as they are rather than relabel.
+"""
 per_type = "\n".join(f"| {t} | {v} |" for t, v in test["per_type_fused_recall_or_specificity"].items())
 
 model_md = ""
@@ -124,7 +145,7 @@ LLM latency p50 **{lat['p50']} ms**, p95 **{lat['p95']} ms**.
 {miss_lines}
 {"" if not dev else f'''
 ## Dev set ({dev['n']} chats), for transparency
-{table(dev)}'''}
+{table(dev)}{dev_noise}'''}
 {model_md}
 ## What we changed between the first run and these numbers (all on the dev set)
 1. The first harness silently counted rate-limited LLM calls as rules-only answers; it now retries until the LLM answers.

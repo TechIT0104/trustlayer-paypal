@@ -1,0 +1,103 @@
+# NUMBERS: Pay-pause evaluation
+
+Measured, not claimed. Reproduce: `python eval/run_eval.py eval/data/test_chats.jsonl eval/results/test`, then
+`python eval/report.py`. LLM answers are cached in `eval/results/llm_cache.json` so re-scoring is deterministic.
+
+## Method
+- **Three disjoint datasets, three different generator models.** Labels always come from the scenario that produced
+  the chat, never from a classifier.
+  - `eval/data/train_chats.jsonl`: training data for the local model (generator `openai/gpt-oss-20b`).
+  - `eval/data/chats.jsonl` (**dev**): used while developing the rules and fusion, and for the model's threshold
+    (generator `qwen/qwen3.8-27b`). We changed the engine after looking at it, so its numbers are optimistic.
+  - `eval/data/test_chats.jsonl` (**held-out test**): generated after all changes (same 20 scenarios, instructed to use
+    different items and phrasing), and only ever scored.
+- Classifier LLM: `openai/gpt-oss-120b` on Groq, temperature 0, with no fallback provider during measurement.
+- Positive class = scam. **PAUSE** = money held + cooling-off. CAUTION = a warning without holding money.
+
+## Held-out test set (80 chats: 40 scam / 40 legit)
+| Detector | Scams paused (recall) | Precision | Honest buyers wrongly paused | Honest buyers shown any warning | Scams with no warning at all | F1 |
+|---|---|---|---|---|---|---|
+| Rules only | 22.5% (9/40) | 100% | 0% (0/40) | 15% | 20% | 0.37 |
+| LLM only (grounded quotes) | 97.5% (39/40) | 97.5% | 2.5% (1/40) | 2.5% | 2.5% | 0.97 |
+| Local fine-tuned model only | 90% (36/40) | 90% | 10% (4/40) | 55% | 0% | 0.90 |
+| Rules + local model (LLM outage mode) | 82.5% (33/40) | 97.1% | 2.5% (1/40) | 37.5% | 0% | 0.89 |
+| **TrustLayer (rules + LLM + local model)** | 97.5% (39/40) | 97.5% | 2.5% (1/40) | 2.5% | 2.5% | 0.97 |
+
+Tactic accuracy on scams: **52.5%** · ungrounded AI quotes discarded: **0** ·
+LLM latency p50 **1506 ms**, p95 **3029 ms**.
+
+### Per scenario (fused: scams paused / honest chats not paused)
+| Scenario | Correct |
+|---|---|
+| advance_fee | 4/4 |
+| advance_fee_deposit | 4/4 |
+| buyer_asks_ff_refused | 4/4 |
+| gift_purchase | 4/4 |
+| hard_haggle | 4/4 |
+| honest_low_price | 4/4 |
+| honest_new_seller | 4/4 |
+| honest_urgency | 3/4 |
+| impersonation | 4/4 |
+| local_pickup | 4/4 |
+| mentions_fees_honestly | 4/4 |
+| normal | 4/4 |
+| obfuscated | 4/4 |
+| off_platform_giftcard_crypto | 4/4 |
+| off_platform_payment | 4/4 |
+| payee_switch | 4/4 |
+| phishing_link | 4/4 |
+| protection_bypass | 3/4 |
+| protection_bypass_subtle | 4/4 |
+| warns_against_ff | 4/4 |
+
+### Every fused error on the test set
+- `Ts003` scam / protection_bypass: fused=CLEAR (rules=CLEAR, llm=CLEAR, model p=0.9482, ai tactic=protection_bypass, rule signals=none)
+  - *Analysis:* The seller proposes the 'Send Money' personal option to skip fees; the buyer refuses and pays through checkout. The LLM quoted the right line but scored it 0.2 (the buyer declined), and when the LLM cites evidence the fusion trusts its score over the local model (p=0.95). No regex matched this wording. Arguably no money was at risk, but a CAUTION would be better. Candidate fix, to be tuned on dev only: let a confident local model lift a grounded-but-low LLM score to CAUTION.
+- `Tl048` legit / honest_urgency: fused=PAUSE (rules=CLEAR, llm=PAUSE, model p=0.7149, ai tactic=off_platform_payment, rule signals=urgency)
+  - *Analysis:* An honest seller in a hurry; the LLM read the pressure as a scam tactic and grounded it in a real quote. This is the documented failure mode of LLM scam detectors (urgency language); the cooling-off design limits the cost: the buyer can still pay, with a short hold.
+
+## Dev set (83 chats), for transparency
+| Detector | Scams paused (recall) | Precision | Honest buyers wrongly paused | Honest buyers shown any warning | Scams with no warning at all | F1 |
+|---|---|---|---|---|---|---|
+| Rules only | 22.4% (11/49) | 100% | 0% (0/34) | 17.6% | 10.2% | 0.37 |
+| LLM only (grounded quotes) | 98% (48/49) | 94.1% | 8.8% (3/34) | 11.8% | 2% | 0.96 |
+| Local fine-tuned model only | 85.7% (42/49) | 95.5% | 5.9% (2/34) | 55.9% | 0% | 0.90 |
+| Rules + local model (LLM outage mode) | 83.7% (41/49) | 100% | 0% (0/34) | 38.2% | 2% | 0.91 |
+| **TrustLayer (rules + LLM + local model)** | 98% (48/49) | 94.1% | 8.8% (3/34) | 11.8% | 2% | 0.96 |
+
+### Dev-set errors: mostly label noise from the generator
+Three of the four dev errors are chats the generator *labelled* honest but whose text is genuinely risky: the seller
+sends their own "checkout link" (l059, l064), or asks for payment before a local-pickup inspection (l062). One "scam"
+(s040) contains no scam at all. We report the numbers as they are rather than relabel.
+
+
+## The local fine-tuned model
+Base: `BothBosu/distilbert-scam-classifier-v1.3` (public, Apache-2.0: DistilBERT trained on LLM-generated scam phone calls).
+Fine-tuned on marketplace payment chats (`eval/data/train_chats.jsonl`, generated by `gpt-oss-20b`) mixed with
+`BothBosu/scam-dialogue` phone dialogues (Apache-2.0), 4 epochs on a GTX 1650 (583 s).
+Exported to ONNX and int8-quantized; runs on CPU in the API. Decision threshold 0.96 chosen on the dev set
+(highest recall at precision of at least 95%).
+
+| Model on the **dev** marketplace set | ROC-AUC | PR-AUC | Precision | Recall | False-positive rate |
+|---|---|---|---|---|---|
+| Public model, zero-shot (threshold 0.5) | 0.885 | 0.927 | 69.7% | 93.9% | 58.8% |
+| After fine-tuning | 0.956 | 0.973 | 100% | 83.7% | 0% |
+
+Phone-scam test split (the base model's original task): ROC-AUC 1.0 before → 1.0 after, so
+fine-tuning did not erase what it knew. The base model's perfect zero-shot phone score suggests it saw that split in
+training, so this is only a "did it forget?" check, not a fair benchmark. The dev set chose the best epoch and the threshold,
+so dev numbers here are optimistic; the held-out test table above is the honest one.
+
+**Ablation: does starting from the public scam model help?** Same data and settings, starting from plain `distilbert-base-uncased`: dev ROC-AUC 0.953, PR-AUC 0.961, precision 95.5%, recall 85.7% at its own dev-chosen threshold.
+
+## What we changed between the first run and these numbers (all on the dev set)
+1. The first harness silently counted rate-limited LLM calls as rules-only answers; it now retries until the LLM answers.
+2. Fusion bug: an LLM judgement backed by a verified quote could not pause unless a rule also fired, contrary to the
+   design. Grounded LLM evidence now carries the decision on its own.
+3. Rules were broadened for off-platform payment wording (bank transfer, personal check, "pay via personal").
+4. Added the fine-tuned local model as a supporting layer (it never pauses alone; it cannot cite evidence).
+
+## Caveats
+- All chats are LLM-generated: realistic patterns, not real-world prevalence. Real marketplace data would be the next step.
+- With 80 test examples, each rate has an uncertainty of roughly ±8–10 points.
+- The test set uses the same scenario list as dev/train, so it measures generalisation to new wording, not to unseen tactics.

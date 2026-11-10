@@ -1,0 +1,99 @@
+{
+  "n": 83,
+  "n_scam": 49,
+  "n_legit": 34,
+  "classifier_model": "openai/gpt-oss-120b",
+  "dataset": "eval\\data\\chats.jsonl",
+  "rules": {
+    "tp": 11,
+    "fp": 0,
+    "fn": 38,
+    "tn": 34,
+    "precision": 1.0,
+    "recall": 0.224,
+    "f1": 0.367,
+    "false_pause_rate": 0.0,
+    "honest_buyers_warned": 0.176,
+    "scams_fully_missed": 0.102
+  },
+  "llm": {
+    "tp": 48,
+    "fp": 3,
+    "fn": 1,
+    "tn": 31,
+    "precision": 0.941,
+    "recall": 0.98,
+    "f1": 0.96,
+    "false_pause_rate": 0.088,
+    "honest_buyers_warned": 0.118,
+    "scams_fully_missed": 0.02
+  },
+  "fused": {
+    "tp": 48,
+    "fp": 3,
+    "fn": 1,
+    "tn": 31,
+    "precision": 0.941,
+    "recall": 0.98,
+    "f1": 0.96,
+    "false_pause_rate": 0.088,
+    "honest_buyers_warned": 0.118,
+    "scams_fully_missed": 0.02
+  },
+  "model": {
+    "tp": 42,
+    "fp": 2,
+    "fn": 7,
+    "tn": 32,
+    "precision": 0.955,
+    "recall": 0.857,
+    "f1": 0.903,
+    "false_pause_rate": 0.059,
+    "honest_buyers_warned": 0.559,
+    "scams_fully_missed": 0.0
+  },
+  "fused_no_llm": {
+    "tp": 41,
+    "fp": 0,
+    "fn": 8,
+    "tn": 34,
+    "precision": 1.0,
+    "recall": 0.837,
+    "f1": 0.911,
+    "false_pause_rate": 0.0,
+    "honest_buyers_warned": 0.382,
+    "scams_fully_missed": 0.02
+  },
+  "local_model": {
+    "available": true,
+    "error": null,
+    "name": "scam-distilbert",
+    "base_model": "BothBosu/distilbert-scam-classifier-v1.3",
+    "threshold": 0.88
+  },
+  "tactic_accuracy_on_scams": 0.49,
+  "ungrounded_quotes_dropped": 2,
+  "llm_latency_ms": {
+    "p50": null,
+    "p95": null
+  },
+  "per_type_fused_recall_or_specificity": {
+    "advance_fee": "5/5",
+    "advance_fee_deposit": "5/5",
+    "honest_low_price": "3/5",
+    "honest_new_seller": "4/5",
+    "honest_urgency": "4/4",
+    "impersonation": "4/5",
+    "local_pickup": "5/5",
+    "mentions_fees_honestly": "5/5",
+    "normal": "5/5",
+    "obfuscated": "5/5",
+    "off_platform_giftcard_crypto": "5/5",
+    "off_platform_payment": "5/5",
+    "payee_switch": "5/5",
+    "phishing_link": "4/4",
+    "protection_bypass": "5/5",
+    "protection_bypass_subtle": "5/5",
+    "warns_against_ff": "5/5"
+  }
+}

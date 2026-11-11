@@ -197,6 +197,26 @@ function App() {
     ${t && html`<div class=${"toast " + (t.err ? "err" : "")} key=${t.id} role="status"><${Icon} name=${t.err ? "alert" : "checkCircle"} />${t.msg}</div>`}`;
 }
 
+// Sandbox test buyer for reviewers. Sandbox accounts hold only test money; this is not a real PayPal account.
+const SANDBOX_BUYER = { email: "sb-hbn8w53835765@personal.example.com", password: "YFp3sUZ?" };
+function CopyField({ label, value }) {
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(value); toast(`${label} copied.`); }
+    catch { toast("Copy failed. Select the text instead.", true); }
+  };
+  return html`<div class="cred"><span class="xs text-2">${label}</span><code class="mono">${value}</code>
+    <button class="btn sm ghost" onClick=${copy} aria-label=${"Copy " + label}>Copy</button></div>`;
+}
+function SandboxLogin({ compact = false }) {
+  return html`<div class=${"sandbox-login" + (compact ? " compact" : "")}>
+    <div class="row" style="gap:8px;flex-wrap:nowrap;align-items:flex-start"><${Icon} name="user" size=${15} />
+      <div><b>PayPal sandbox login</b>${compact ? "" : html`<span class="text-2"> for the PayPal window (checkout and subscriptions)</span>`}
+        <div class="xs text-2">Test buyer with sandbox money only. Not a real PayPal account.</div></div></div>
+    <${CopyField} label="Email" value=${SANDBOX_BUYER.email} />
+    <${CopyField} label="Password" value=${SANDBOX_BUYER.password} />
+  </div>`;
+}
+
 // ---------------- landing (overview for reviewers) ----------------
 const REPO = "https://github.com/TechIT0104/trustlayer-paypal";
 const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -323,6 +343,7 @@ function Landing() {
         <h2 class="l-h2">A working marketplace, not a mock-up. Here is what to try.</h2>
         <p class="l-sub">Five sellers and five listings, two of them scams. Every button calls the real PayPal Sandbox and a live AI model.
           Each step below takes under a minute.</p></div>
+      <div style="max-width:560px;margin-bottom:20px"><${SandboxLogin} /></div>
       <div class="l-tour">${L_TOUR.map(([t, href, doIt, see], i) => html`<a class="card link l-step" href=${href} key=${t}>
         <span class="l-num">${i + 1}</span>
         <div style="flex:1;min-width:0"><div class="row spread"><b>${t}</b><${Icon} name="arrowRight" size=${16} cls="text-3" /></div>
@@ -632,13 +653,14 @@ function PayButtons({ listing, cfg, acknowledged, contact, onAuthorized }) {
   return html`<div>
     ${state === "loading" && html`<div class="skeleton" style="height:44px"></div>`}
     <div ref=${ref}></div>
+    <div style="margin-top:10px"><${SandboxLogin} compact /></div>
     <details class="fallback" style="margin-top:10px" open=${state === "nosdk"}>
       <summary>PayPal button not loading? Use redirect checkout</summary>
       <div class="row" style="margin-top:10px">
         ${!redirect ? html`<button class="btn sm" onClick=${startRedirect}><${Icon} name="external" size=${14} />Open PayPal in a new tab</button>`
           : html`<a class="btn sm" href=${redirect.approve_url} target="_blank">Reopen PayPal</a><button class="btn sm primary" onClick=${finishRedirect}>I've approved it</button>`}
       </div>
-      <div class="xs text-3" style="margin-top:8px">Sign in with a PayPal sandbox personal account.</div>
+      <div class="xs text-3" style="margin-top:8px">Sign in with the sandbox login above.</div>
     </details>
   </div>`;
 }
@@ -1119,6 +1141,7 @@ function SubscriptionsPage({ cfg }) {
           ${promises.map(([icon, t, d]) => html`<div class="finding" key=${t}><span class="ic accent" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none"><${Icon} name=${icon} size=${14} /></span>
             <div><div style="font-weight:500">${t}</div><div class="sm text-2">${d}</div></div></div>`)}
         </div></div>
+        <${SandboxLogin} compact />
         <div class="card"><div class="card-body"><div class="xs text-2">About 7 in 10 US adults have been charged after forgetting a free trial (2026 surveys), and 20+ US states now require click-to-cancel. Forgotten-trial charges often come back as chargebacks, which hurts sellers too.</div></div></div>
       </div>
     </div>`;

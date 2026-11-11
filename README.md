@@ -6,8 +6,20 @@ Orders v2, Payments v2 and Payouts APIs with an AI layer whose every money decis
 > Built for the **PayPal AI Hackathon** (Nov 2026). Runs entirely on the free PayPal **sandbox**.
 
 **Live demo: https://trustlayer-e5mz.onrender.com**. It's on Render's free tier, so the first load after idle can take
-about 50 seconds. To approve payments, use a PayPal **sandbox personal** account (create one free at
-developer.paypal.com → Sandbox → Accounts). **Audit log → Reset demo** restores the starting data.
+about 50 seconds. **Audit log → Reset demo** restores the starting data.
+
+## Try it: PayPal sandbox buyer login
+
+When the PayPal window opens (checkout or subscription), log in with this **sandbox test buyer**. It holds only
+sandbox test money; it is not a real PayPal account and cannot move real funds.
+
+| | |
+|---|---|
+| Email | `sb-hbn8w53835765@personal.example.com` |
+| Password | `YFp3sUZ?` |
+
+Start with the *iPhone 15 Pro* listing (a scam), then the *Canon AE-1* (an honest seller with a late parcel). The
+Overview page lists six things to try. You can also use your own sandbox personal account from developer.paypal.com.
 
 ---
 
@@ -212,9 +224,10 @@ python eval/run_eval.py && python eval/report.py   # Pay-pause precision / recal
 `python scripts/register_webhook.py https://<your-app>.onrender.com` and set the printed `PAYPAL_WEBHOOK_ID`.
 
 ## Demo script (3 acts, under 3 minutes)
-1. **The scam**: open the *iPhone 15 Pro* listing → **Continue to pay** → Pay-pause flags Friends & Family + "no G&S" and highlights the exact chat lines → **Don't pay**. Or insist, add a trusted contact, approve in PayPal, and watch the **cooling-off countdown**; the contact clicks **"This looks like a scam"** and the **hold is voided**.
-2. **The honest problem**: buy the *Canon AE-1* (CLEAR) → approve → on the order page: *"It arrived 4 days late and I missed my trip"* → the agent offers $18 within policy → **Accept** → PayPal captures $162 and releases $18 → **Item received** → seller paid by Payouts.
-3. **The seller's view**: *Seller health → GadgetHub*: 1.59% dispute rate over the 1.5% line, "2.52% without early resolution", plain-English actions. **Ledger**: tamper with a record, then **Verify**.
+The click-by-click recording script is [docs/DEMO_SCRIPT.pdf](docs/DEMO_SCRIPT.pdf). In short:
+1. **The scam**: open the *iPhone 15 Pro* listing → **Continue to payment** → Pay-pause flags Friends & Family + "no G&S" and highlights the exact chat lines → **Don't send money**. Or choose **continue with safeguards**, add a trusted contact, approve in PayPal, and watch the **cooling-off countdown**; the contact clicks **Stop this payment** and the **hold is voided**.
+2. **The honest problem**: buy the *Canon AE-1* (no risk found) → approve → on the order page: *"It arrived 4 days late and I missed my trip"* → the assistant offers a partial refund within policy → **Accept offer** → PayPal captures less and releases the rest of the hold → **Pay out seller** → seller paid by Payouts.
+3. **The seller's view**: *Seller health → GadgetHub*: dispute rate over the 1.5% line, the rate without early resolution, plain-English actions. **Audit log**: **Verify chain**, then **Simulate tampering**.
 
 ## Honest limitations
 - Sandbox only. A production version needs PayPal's platform/partner onboarding for multi-seller payouts, and real 24-hour cooling-off windows (the demo uses 2 minutes).

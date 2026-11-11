@@ -38,9 +38,15 @@ and extended the idea to the two other moments where trust fails.
    rewrite), a real PayPal plan per offering, and a subscriber dashboard that flags trial subscribers about to be
    charged without ever using it, the classic source of chargebacks.
 5. **A model we fine-tuned ourselves.** A public DistilBERT scam classifier (trained on phone-scam calls) fine-tuned on
-   marketplace payment chats, quantized to ONNX int8 and run on CPU inside the API in about 80 ms. Out of the box it
-   flagged 59% of honest marketplace chats; after fine-tuning, 0% (dev set). When every hosted LLM is down, rules plus
-   this model still pause most scams instead of rules alone.
+   marketplace payment chats with two heads: scam / not scam, and *which* tactic. A second round added "hard" chats
+   (honest patterns that fooled the first model, polite scams). We also distilled two small MiniLM students and
+   compared all four on the dev set; the teacher shipped because the students lost the tactic skill. It runs as ONNX
+   int8 on CPU inside the API in about 80 ms. Out of the box the public model flagged 59% of honest marketplace chats;
+   after fine-tuning, 0% at its threshold. When every hosted LLM is down, rules plus this model still paused 80% of
+   held-out scams, against 35% for rules alone.
+
+**Results on 80 held-out chats, scored once:** all 40 scams paused, 3 of 40 honest buyers wrongly paused (each analysed
+in NUMBERS.md), and the right tactic shown on 62.5% of scams (LLM alone: 55%).
 6. **Audit log.** Every PayPal call and AI decision lives in a SHA-256 hash chain; tampering is detected and located.
 
 ## How we built it
@@ -53,9 +59,9 @@ and extended the idea to the two other moments where trust fails.
 - **AI:** Groq `openai/gpt-oss-120b` (primary), Gemini `gemini-flash-lite-latest` (automatic fallback), optional local
   Ollama, plus our fine-tuned DistilBERT (PyTorch on a GTX 1650 → ONNX int8 → ONNX Runtime on CPU). JSON-only outputs,
   a grounding check on cited evidence, and deterministic policy enforcement around every model decision.
-- **Evaluation done properly:** three disjoint datasets from three different generator models (train, dev, held-out
-  test); the engine and the model's threshold were tuned on dev only; the test set was generated after every change and
-  scored once.
+- **Evaluation done properly:** disjoint datasets from different generator models (train, dev, two held-out tests).
+  The engine, model choice and thresholds were tuned on dev only. Once we had looked at test v1 it counted as seen, so
+  we generated a fresh test v2 before comparing the final models and scored it exactly once.
 - **Stack:** FastAPI + SQLite, a no-build React frontend, deployed on Render. 65 offline tests (fake PayPal and fake
   LLM), a real-sandbox end-to-end test, and a headless UI test.
 - **Dev tooling:** Claude Code with the PayPal AI Toolkit plugin and sandbox MCP server.
@@ -99,6 +105,7 @@ distilbert, onnx, onnxruntime, render, playwright, pytest
 - **Groq, openai/gpt-oss-20b:** generated the training chats for the local model (a third, disjoint generator).
 - **DistilBERT fine-tuned by us** from `BothBosu/distilbert-scam-classifier-v1.3` (Apache-2.0) with PyTorch +
   Hugging Face Transformers on a GTX 1650, using our marketplace chats and `BothBosu/scam-dialogue` (Apache-2.0);
-  exported to ONNX int8 and served with ONNX Runtime. Supports Pay-pause and keeps it working during LLM outages.
+  exported to ONNX int8 and served with ONNX Runtime. Two heads (scam probability and tactic); MiniLM-L6/L12 students
+  distilled from it for comparison. Supports Pay-pause, names the tactic, and keeps it working during LLM outages.
 - **Plus reminders:** the same LLM writes the honest pre-charge reminder and cancel message; code states the facts.
 - **Claude Code + PayPal AI Toolkit (MCP):** development assistant; used the sandbox MCP tools to inspect orders while building.

@@ -67,6 +67,13 @@ NOTES = {
     "Ts003": "Seller proposes the 'Send Money' personal option; the buyer refuses and uses checkout. The LLM quoted the "
              "line but scored it 0.2, and a grounded LLM score currently outranks the local model (p=0.95).",
     "Tl048": "Honest seller in a hurry; the LLM read urgency as a tactic (the documented failure mode of LLM scam detectors).",
+    "Vl051": "Honest low-price sale, but the seller says they need 'guaranteed funds, not pending PayPal balances'; the LLM "
+             "read that as a push away from protected payment. Borderline even for a human reviewer.",
+    "Vl078": "The seller offers to write 'Gift Voucher' in the PayPal memo to keep a present discreet; the LLM read 'gift' "
+             "as a Friends & Family (gift payment) request, with grounded quotes, so it could pause on its own.",
+    "Vl080": "The seller sells a bait-shop gift card as an add-on. The 'gift card' keyword rule fired (it targets gift-card "
+             "payment) and the LLM's 0.6 plus the rule-agreement bonus reached the pause line. A rule that can't tell "
+             "'pay me with a gift card' from 'buy a gift card' is the fix, but we did not change the engine after scoring.",
 }
 
 t2, t2_per = load("test2")
@@ -142,6 +149,10 @@ LLM latency p50 {lat['p50']} ms, p95 {lat['p95']} ms. Local model: `{t2['local_m
 
 ### Every fused error on test v2
 {misses_md(t2_per, NOTES)}
+
+In LLM-outage mode (rules + local model) the errors are the opposite kind: honest sellers who *warn against*
+Friends & Family or deposits trip the keyword rules, and without the LLM to read the context only a confident local
+model can veto them. That is why outage mode warns more honest buyers; it is a fallback, not the main path.
 {"" if not t1 else f'''
 ## Test set v1 (seen; for comparison)
 As first scored with the v1 local model (before we looked at it):

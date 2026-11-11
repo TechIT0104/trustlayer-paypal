@@ -53,11 +53,11 @@ def load() -> list[dict]:
 def run_one(r: dict, mode: str) -> dict:
     # assess() deliberately falls back to rules when the LLM is unavailable (good for the product, wrong for
     # measuring the LLM), so a missing AI result here means "rate-limited, try again", not an answer.
-    for attempt in range(12):
+    for attempt in range(30):
         res = scam.assess(r["listing_n"], r["seller_n"], r["chat"], mode=mode)
         if mode not in ("llm", "fused") or res.get("ai") is not None:  # only LLM modes need an LLM answer
             return res
-        time.sleep(min(60, 8 * (attempt + 1)))
+        time.sleep(min(90, 10 * (attempt + 1)))
     raise RuntimeError(f"LLM unavailable for {r['id']} after retries: {res.get('ai_error')}")
 
 

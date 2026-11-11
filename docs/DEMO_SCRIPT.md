@@ -13,7 +13,7 @@ Voice-over only; no music you don't own. Sandbox buyer: the US personal sandbox 
 | 1:35–1:45 | Confirm delivery → Payment card | "Confirm delivery and the seller is paid with PayPal Payouts. Every PayPal ID is here." |
 | 1:45–2:05 | Seller health → GadgetHub | "Sellers fear holds with no warning. GadgetHub is over the 1.5% dispute line; without early resolution it would be 2.52%. Plain-English next steps." |
 | 2:05–2:30 | Subscriptions → a trial → Simulate +5 days → honest reminder → Cancel. Then Seller health → Maya → Subscriptions kit → paste "6-month minimum, call us to cancel" → Review terms (blocked) | "Subscriptions without the trap. Before the first charge it tells you honestly whether you used it, here it says cancel, and cancelling is one confirmation. Sellers get the same kit: the AI reviews their terms, and code blocks traps like call-to-cancel before anything reaches PayPal." |
-| 2:30–2:50 | Audit log → Simulate tampering → break detected; then README evaluation table | "Every PayPal call and AI decision is hash-chained. And these are our real numbers on a held-out test set we generated after every change, including the misses." |
+| 2:30–2:50 | Audit log → Simulate tampering → break detected; then README evaluation table | "Every PayPal call and AI decision is hash-chained. And these are our real numbers on 80 held-out chats, scored once: every scam paused, three honest buyers wrongly paused, and we show you why." |
 
 ## Backup lines if something is slow
 - PayPal popup slow: use "PayPal button not loading? Use redirect checkout".

@@ -166,7 +166,8 @@ function App() {
   useEffect(() => { api("/api/config").then(setCfg).catch(() => setCfg({})); }, []);
   const [page, a] = route;
   let body;
-  if (!page) body = html`<${Market} />`;
+  if (!page) body = html`<${Landing} />`;
+  else if (page === "market") body = html`<${Market} />`;
   else if (page === "listing") body = html`<${ListingPage} id=${a} cfg=${cfg} />`;
   else if (page === "orders") body = html`<${OrdersPage} />`;
   else if (page === "order") body = html`<${OrderPage} id=${a} />`;
@@ -174,7 +175,7 @@ function App() {
   else if (page === "sellers") body = a ? html`<${SellerPage} id=${a} />` : html`<${SellersPage} />`;
   else if (page === "ledger") body = html`<${LedgerPage} />`;
   else if (page === "plus" || page === "subscriptions") body = html`<${SubscriptionsPage} cfg=${cfg} />`;
-  else body = html`<div class="empty">Page not found. <a href="#/">Back to marketplace</a></div>`;
+  else body = html`<div class="empty">Page not found. <a href="#/market">Back to marketplace</a></div>`;
   const tab = (p, icon, label, also = []) => {
     const on = (page || "") === p || also.includes(page);
     return html`<a class=${on ? "active" : ""} href=${"#/" + p}><${Icon} name=${icon} />${label}</a>`;
@@ -183,7 +184,8 @@ function App() {
     <header class="topbar"><div class="container">
       <a class="brand" href="#/"><span class="brand-mark"><${Icon} name="shield" size=${17} sw=${2} /></span>TrustLayer</a>
       <nav class="tabs">
-        ${tab("", "store", "Marketplace", ["listing"])}
+        ${tab("", "sparkles", "Overview")}
+        ${tab("market", "store", "Marketplace", ["listing"])}
         ${tab("orders", "receipt", "Orders", ["order"])}
         ${tab("sellers", "activity", "Seller health")}
         ${tab("subscriptions", "receipt", "Subscriptions", ["plus"])}
@@ -191,8 +193,165 @@ function App() {
       </nav>
       <span class="env badge warning"><span class="dot"></span>PayPal Sandbox</span>
     </div></header>
-    <main><div class="container">${body}</div></main>
+    <main class=${page ? "" : "landing"}>${page ? html`<div class="container">${body}</div>` : body}</main>
     ${t && html`<div class=${"toast " + (t.err ? "err" : "")} key=${t.id} role="status"><${Icon} name=${t.err ? "alert" : "checkCircle"} />${t.msg}</div>`}`;
+}
+
+// ---------------- landing (overview for reviewers) ----------------
+const REPO = "https://github.com/TechIT0104/trustlayer-paypal";
+const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+const L_PROBLEMS = [
+  { icon: "shieldAlert", moment: "Before paying", stat: "71%",
+    text: "of UK authorised-push-payment fraud cases are purchase scams: £576M lost in 2025. If you were tricked into paying, it isn't “unauthorized”, so it is rarely refunded." },
+  { icon: "message", moment: "When something goes wrong", stat: "43.8%",
+    text: "of chargebacks are friendly fraud, and 85% of people who file one say bad service pushed them to it. A small fix early would have saved both sides." },
+  { icon: "activity", moment: "For sellers", stat: "1.5%",
+    text: "is the dispute ratio at which card networks flag a merchant. About 1 in 5 PayPal reviews mention sudden holds with no explanation." },
+  { icon: "clock", moment: "Every month after", stat: "Trial traps",
+    text: "A free trial quietly turns into a charge for something never used, and cancelling is hidden. The buyer's only lever is a chargeback, which hurts the seller too." },
+];
+const L_TODAY = [
+  ["Before paying", "Generic warnings about Friends & Family. Protection applies after a claim. A few banks (Revolut) run AI scam checks inside the payment flow.",
+    "Not about this chat, and the money has already left.", "Reads this chat, quotes the risky lines, and holds the money (authorize, not capture) with a cooling-off and a trusted contact."],
+  ["Something goes wrong", "Open a dispute, escalate to a claim, wait. Or a chargeback through the card network.",
+    "Slow and adversarial. The seller pays fees even when a small refund would have done.", "An assistant offers a fix within the seller's own policy. Code caps it. Accepting runs a partial capture or refund on PayPal."],
+  ["Seller account", "Holds and limitations, explained after the fact. Dispute ratios watched by card networks.",
+    "Sellers find out they are at risk when it is too late.", "A live health score against the 1.5% line, explained in plain English with next steps."],
+  ["Subscriptions", "Reminders are optional. Cancellation flows are designed by the merchant.",
+    "Dark patterns turn into chargebacks.", "An honest pre-charge reminder, one-click cancel, and an AI terms review where code blocks the traps."],
+];
+const L_JOURNEY = [
+  { t: "Chat and checkout", ai: "Pay-pause reads the listing and chat with rules, an LLM that must quote the exact lines, and a model we fine-tuned.", pp: "Orders v2, intent AUTHORIZE", href: "#/listing/L2" },
+  { t: "Money on hold", ai: "Risky payments get a cooling-off timer, and someone the buyer trusts can stop them. Nothing is charged.", pp: "Authorizations: void, reauthorize", href: "#/listing/L2" },
+  { t: "Something goes wrong", ai: "A resolution assistant offers a fix within the seller's refund policy. Code enforces the limit.", pp: "Partial capture, refunds", href: "#/listing/L1" },
+  { t: "Seller gets paid", ai: "Payout after delivery. Seller health explains dispute risk in plain English, before a hold.", pp: "Payouts, Webhooks", href: "#/sellers/gadgethub" },
+  { t: "Every month after", ai: "A real trial, a truthful reminder before the first charge, and one-click cancel. Sellers get a terms review.", pp: "Subscriptions, billing plans", href: "#/subscriptions" },
+];
+const L_TOUR = [
+  ["Pay-pause", "#/listing/L2", "Open the iPhone listing and press Continue to payment.", "The payment is paused. The flagged chat lines are highlighted, and the AI's quotes are checked against the real chat."],
+  ["Cooling-off and trusted contact", "#/listing/L2", "Choose “I know this seller”, add a contact, approve in the PayPal popup.", "A countdown runs while PayPal only holds the money. The contact presses Stop and the authorization is voided: $0 charged."],
+  ["Resolution before dispute", "#/listing/L1", "Buy the Canon camera, then report “arrived 4 days late” in the order.", "An offer within the seller's policy. Accepting captures less of the hold on PayPal. No dispute is ever opened."],
+  ["Seller health", "#/sellers/gadgethub", "Open GadgetHub Outlet.", "Over the 1.5% dispute line, what it would be without early resolution, and plain-English next steps."],
+  ["Honest subscriptions", "#/subscriptions", "Start a trial, simulate five days, read the reminder, cancel.", "The reminder says whether you used it. Cancelling is one confirmation. Sellers' trap terms are blocked."],
+  ["Audit log", "#/ledger", "Press Verify chain, then Simulate tampering.", "Every PayPal call and AI decision is hash-chained. The edited record is found and highlighted."],
+];
+
+function Landing() {
+  return html`
+    <section class="l-hero"><div class="container l-hero-grid">
+      <div>
+        <span class="badge accent"><span class="dot"></span>PayPal AI Hackathon 2026 · running on PayPal Sandbox</span>
+        <h1 class="l-h1">AI that protects the whole life of a payment.</h1>
+        <p class="l-lead">Card fraud tools look at the card. Scams, disputes and subscription traps happen in the
+          conversation around the payment. TrustLayer reads that context, has PayPal <b>hold</b> the money while it decides,
+          and settles problems before they become disputes.</p>
+        <div class="row" style="gap:12px;margin-top:28px">
+          <a class="btn primary lg" href="#/market">Open the live marketplace<${Icon} name="arrowRight" /></a>
+          <button class="btn lg" onClick=${() => scrollToId("problem")}>Why we built it</button>
+        </div>
+        <div class="l-trust">
+          <span><${Icon} name="lock" size=${14} />Authorize first, capture later</span>
+          <span><${Icon} name="file" size=${14} />AI must quote its evidence</span>
+          <span><${Icon} name="shieldCheck" size=${14} />Code enforces every money limit</span>
+        </div>
+      </div>
+      <div class="l-mock" aria-label="Example: a scam chat paused before payment">
+        <div class="l-mock-head"><span class="avatar">Q</span><div><b>quickdeals_2291</b><div class="xs text-2">Joined 5 days ago · 0 sales</div></div><span class="badge warning" style="margin-left:auto">New seller</span></div>
+        <div class="l-mock-chat">
+          <div class="msg"><div class="bubble">yes brand new sealed, my company gave it as bonus</div></div>
+          <div class="msg mine"><div class="bubble">Can I just pay with the checkout on the site?</div></div>
+          <div class="msg flagged"><div><div class="bubble">send $420 on paypal friends and family and I ship today</div>
+            <div class="lineref"><${Icon} name="alert" size=${12} />Line 4 · quoted by the AI, verified</div></div></div>
+          <div class="msg flagged"><div><div class="bubble">please no goods and services</div>
+            <div class="lineref"><${Icon} name="alert" size=${12} />Line 5 · rule: avoids buyer protection</div></div></div>
+        </div>
+        <div class="l-mock-verdict">
+          <span class="ic danger" style="width:36px;height:36px;border-radius:10px;display:grid;place-items:center"><${Icon} name="shieldAlert" size=${18} /></span>
+          <div><b>Payment paused</b><div class="xs text-2">Tactic: protection bypass · $420 held by PayPal · $0 charged</div></div>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="l-sec" id="problem"><div class="container">
+      <div class="l-head"><span class="eyebrow">The problem</span>
+        <h2 class="l-h2">Trust breaks at four moments, and the money usually moves before anyone checks.</h2></div>
+      <div class="l-problems">${L_PROBLEMS.map((p) => html`<div class="card l-problem" key=${p.moment}>
+        <div class="row" style="gap:8px"><span class="ic accent l-ic"><${Icon} name=${p.icon} size=${16} /></span><span class="sm" style="font-weight:600">${p.moment}</span></div>
+        <div class=${"l-stat" + (p.stat.length > 6 ? " word" : "")}>${p.stat}</div><p class="sm text-2" style="margin:0">${p.text}</p></div>`)}</div>
+      <p class="xs text-3" style="margin-top:14px">Sources: UK Finance / PSR APP-fraud statistics 2025; Chargebacks911 2026 field report; Visa VAMP threshold (Apr 2026); public PayPal review analysis. Full list in the README.</p>
+    </div></section>
+
+    <section class="l-sec alt" id="today"><div class="container">
+      <div class="l-head"><span class="eyebrow">Today's answers, and where we stand</span>
+        <h2 class="l-h2">Existing tools react after the money has moved. TrustLayer acts in the moment, with evidence.</h2></div>
+      <div class="card table-wrap"><table class="table l-table">
+        <thead><tr><th>Moment</th><th>What exists today</th><th>The gap</th><th class="l-us">TrustLayer</th></tr></thead>
+        <tbody>${L_TODAY.map(([m, today, gap, us]) => html`<tr key=${m}><td class="cell-main" style="white-space:nowrap">${m}</td>
+          <td class="text-2">${today}</td><td class="text-2">${gap}</td><td class="l-us"><div class="row" style="gap:8px;align-items:flex-start;flex-wrap:nowrap"><${Icon} name="checkCircle" cls="l-ok" />${us}</div></td></tr>`)}</tbody>
+      </table></div>
+    </div></section>
+
+    <section class="l-sec" id="idea"><div class="container">
+      <div class="l-head"><span class="eyebrow">The idea</span>
+        <h2 class="l-h2">Authorize first. Let AI decide with evidence. Then move the money.</h2>
+        <p class="l-sub">PayPal already has the primitive most checkouts never use: an authorization holds the buyer's money without
+          charging it. That hold gives AI time to look, to ask a trusted person, or to settle a problem, and it can be
+          voided at no cost. We wrap that hold in three rules.</p></div>
+      <div class="l-three">
+        <div class="card card-body"><span class="l-num">1</span><h3>Hold, don't charge</h3><p class="sm text-2">Every checkout is a PayPal authorization. Until the buyer is safe and the item arrives, the money can still be voided or partly captured.</p></div>
+        <div class="card card-body"><span class="l-num">2</span><h3>Evidence, not opinions</h3><p class="sm text-2">The AI must quote the exact chat lines behind a warning, and code checks every quote. Invented evidence is thrown away.</p></div>
+        <div class="card card-body"><span class="l-num">3</span><h3>AI advises, code moves money</h3><p class="sm text-2">Refund limits, blocked subscription terms and payouts are enforced in code, and every step lands in a tamper-evident log.</p></div>
+      </div>
+    </div></section>
+
+    <section class="l-sec alt" id="journey"><div class="container">
+      <div class="l-head"><span class="eyebrow">The story</span>
+        <h2 class="l-h2">One payment, five moments, AI at each one.</h2>
+        <p class="l-sub">Follow a single payment through its life. At each moment TrustLayer adds one AI safeguard on top of a real PayPal API call.</p></div>
+      <ol class="l-journey">${L_JOURNEY.map((j, i) => html`<li key=${j.t}>
+        <span class="l-node">${i + 1}</span>
+        <div class="l-jt">${j.t}</div>
+        <p class="sm text-2">${j.ai}</p>
+        <div class="l-pp"><span class="xs text-3">PayPal</span> <span class="xs">${j.pp}</span></div>
+        <a class="sm l-try" href=${j.href}>See it<${Icon} name="chevronRight" size=${14} /></a></li>`)}</ol>
+      <div class="callout info" style="margin-top:20px"><${Icon} name="hash" /><div>Underneath every moment: each PayPal call and AI decision is written to a SHA-256 hash chain, so any edit afterwards is detected. <a href="#/ledger">Open the audit log</a></div></div>
+    </div></section>
+
+    <section class="l-sec" id="tour"><div class="container">
+      <div class="l-head"><span class="eyebrow">About this site</span>
+        <h2 class="l-h2">A working marketplace, not a mock-up. Here is what to try.</h2>
+        <p class="l-sub">Five sellers and five listings, two of them scams. Every button calls the real PayPal Sandbox and a live AI model.
+          Each step below takes under a minute.</p></div>
+      <div class="l-tour">${L_TOUR.map(([t, href, doIt, see], i) => html`<a class="card link l-step" href=${href} key=${t}>
+        <span class="l-num">${i + 1}</span>
+        <div style="flex:1;min-width:0"><div class="row spread"><b>${t}</b><${Icon} name="arrowRight" size=${16} cls="text-3" /></div>
+          <div class="sm" style="margin-top:6px"><span class="text-3">Do</span> ${doIt}</div>
+          <div class="sm text-2" style="margin-top:4px"><span class="text-3">You'll see</span> ${see}</div></div></a>`)}</div>
+    </div></section>
+
+    <section class="l-sec alt" id="results"><div class="container">
+      <div class="l-head"><span class="eyebrow">Measured, not claimed</span>
+        <h2 class="l-h2">Scored once on 80 chats no part of the system was tuned on.</h2></div>
+      <div class="l-results">
+        <div class="card stat"><div class="l">Scams paused</div><div class="v">40 / 40</div><div class="h">every scam held before money moved</div></div>
+        <div class="card stat"><div class="l">Honest buyers wrongly paused</div><div class="v">3 / 40</div><div class="h">each one analysed in NUMBERS.md</div></div>
+        <div class="card stat"><div class="l">If every LLM is down</div><div class="v">80%</div><div class="h">of scams still paused, vs 35% for rules alone</div></div>
+        <div class="card stat"><div class="l">Our fine-tuned model</div><div class="v">~80 ms</div><div class="h">on a CPU, no API key, names the tactic</div></div>
+      </div>
+      <p class="sm text-2" style="margin-top:14px">DistilBERT fine-tuned from a public scam classifier on marketplace chats, with a second head that names the tactic.
+        <a href=${REPO + "/blob/main/NUMBERS.md"} target="_blank" rel="noopener">Every number and every miss</a>.</p>
+    </div></section>
+
+    <section class="l-cta"><div class="container">
+      <h2 class="l-h2" style="color:#fff">See it work in five minutes.</h2>
+      <p>Start with the iPhone listing. It is a scam.</p>
+      <div class="row" style="gap:12px;justify-content:center;margin-top:20px">
+        <a class="btn lg" href="#/listing/L2">Start with the scam listing<${Icon} name="arrowRight" /></a>
+        <a class="btn lg l-ghost" href=${REPO} target="_blank" rel="noopener">Source on GitHub<${Icon} name="external" size=${15} /></a>
+      </div>
+      <p class="xs" style="margin-top:28px;opacity:.7">PayPal Orders v2, Payments v2, Payouts, Subscriptions, Webhooks, JS SDK · Groq gpt-oss-120b, Gemini, fine-tuned DistilBERT · FastAPI, React</p>
+    </div></section>`;
 }
 
 // ---------------- marketplace ----------------
@@ -255,7 +414,7 @@ function ListingPage({ id, cfg }) {
   };
 
   return html`
-    <${Back} to="#/" label="Marketplace" />
+    <${Back} to="#/market" label="Marketplace" />
     <div class="grid cols-main">
       <div class="stack">
         <div class="card"><div class="card-body">
@@ -408,7 +567,7 @@ function Checkout({ listing, seller, risk, checking, onCheck, cfg }) {
   const paused = risk.verdict === "PAUSE";
   return html`
     ${modal && paused && html`<${PauseModal} risk=${risk} cfg=${cfg}
-        onCancel=${() => { setModal(false); toast("Payment cancelled. No money moved."); go("/"); }}
+        onCancel=${() => { setModal(false); toast("Payment cancelled. No money moved."); go("/market"); }}
         onProceed=${(c) => { setContact(c); setModal(false); }} />`}
     <div class="stack">
       <div class="status-card">
@@ -420,7 +579,7 @@ function Checkout({ listing, seller, risk, checking, onCheck, cfg }) {
         </div>
         ${risk.verdict === "CAUTION" && html`<div class="section"><${Signals} risk=${risk} /></div>`}
         ${paused && !contact && html`<div class="section stack" style="gap:8px">
-          <button class="btn dark block" onClick=${() => go("/")}>Don't send money</button>
+          <button class="btn dark block" onClick=${() => go("/market")}>Don't send money</button>
           <button class="btn ghost block" onClick=${() => setModal(true)}>Review the warning</button></div>`}
         <div class="section"><${ModelLine} risk=${risk} /></div>
       </div>
@@ -492,7 +651,7 @@ function OrdersPage() {
     ${error && html`<${ErrorBox} error=${error} />`}
     ${loading ? html`<${Loading} />` : data.length === 0 ? html`<div class="card empty">
         <div class="ic neutral" style="width:44px;height:44px;border-radius:10px;display:grid;place-items:center"><${Icon} name="receipt" size=${20} /></div>
-        <b>No orders yet</b><div class="sm" style="margin-top:4px">Buy something from the <a href="#/">marketplace</a> to see the payment flow.</div></div>`
+        <b>No orders yet</b><div class="sm" style="margin-top:4px">Buy something from the <a href="#/market">marketplace</a> to see the payment flow.</div></div>`
       : html`<div class="card table-wrap"><table class="table">
         <thead><tr><th>Order</th><th>Item</th><th>Seller</th><th>Screening</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead>
         <tbody>${data.map((o) => html`<tr class="click" key=${o.id} onClick=${() => go("/order/" + o.id)}>
@@ -1031,14 +1190,31 @@ function LedgerPage() {
   const [busy, setBusy] = useState(false);
   const tamper = async () => { setBusy(true); try { const r = await api("/api/ledger/tamper", { method: "POST" }); toast(`Record #${r.tampered_seq} was edited directly in the database.`); await reload(); } catch (e) { toast(e.message, true); } finally { setBusy(false); } };
   const reset = async () => { if (!confirm("Reset all demo data, including orders and the audit log?")) return; await api("/api/admin/reset", { method: "POST" }); toast("Demo data reset."); reload(); };
+  const [checked, setChecked] = useState(null);
+  const [verifying, setVerifying] = useState(false);
+  // Re-reads every record from the database and recomputes each SHA-256 link on the server.
+  const verify = async () => {
+    setVerifying(true);
+    const t0 = performance.now();
+    try {
+      const r = await api("/api/ledger");
+      await reload();
+      const ms = Math.round(performance.now() - t0);
+      setChecked({ at: Date.now() / 1000, ms, ok: r.verify.ok, count: r.verify.count });
+      toast(r.verify.ok ? `Recomputed ${r.verify.count} hashes: chain intact.` : `Chain broken at record #${r.verify.broken_at}.`, !r.verify.ok);
+    } catch (e) { toast(e.message, true); } finally { setVerifying(false); }
+  };
   const v = data?.verify;
   return html`<${PageHead} title="Audit log" sub="Every PayPal call and every AI decision, in an append-only SHA-256 hash chain. Changing any record breaks the chain at that point."
-      right=${html`<div class="row"><button class="btn sm" onClick=${reload}><${Icon} name="refresh" size=${14} />Verify chain</button>
+      right=${html`<div class="row"><button class="btn sm" disabled=${verifying} onClick=${verify}>${verifying ? html`<${Spinner} />` : html`<${Icon} name="refresh" size=${14} />`}Verify chain</button>
         <button class="btn sm" disabled=${busy} onClick=${tamper}>Simulate tampering</button><button class="btn sm ghost" onClick=${reset}>Reset demo</button></div>`} />
     ${v && html`<div class=${"callout " + (v.ok ? "success" : "danger")} style="margin-bottom:16px">
       <${Icon} name=${v.ok ? "shieldCheck" : "shieldAlert"} />
       <div>${v.ok ? html`<b>Chain verified.</b> ${v.count} records, head <span class="mono">${v.head?.slice(0, 16)}…</span>`
-        : html`<b>Tampering detected at record #${v.broken_at}</b> (${v.type}). Every record after it can no longer be trusted.`}</div></div>`}
+        : html`<b>Tampering detected at record #${v.broken_at}</b> (${v.type}). Every record after it can no longer be trusted.`}
+        <div class="xs" style="opacity:.85;margin-top:2px">${checked
+          ? `Last check ${clock(checked.at)}: every record re-read from the database and its SHA-256 link recomputed (${checked.ms} ms).`
+          : "Verify chain re-reads every record and recomputes each link. Simulate tampering edits one record behind the app's back to show the break."}</div></div></div>`}
     ${loading ? html`<${Loading} />` : html`<div class="card table-wrap"><table class="table">
       <thead><tr><th>#</th><th>Event</th><th>Reference</th><th>Details</th><th>Hash</th><th>Time</th></tr></thead>
       <tbody>${(data?.events || []).map((e) => html`<tr key=${e.seq} class=${v && !v.ok && e.seq === v.broken_at ? "bad" : ""}>

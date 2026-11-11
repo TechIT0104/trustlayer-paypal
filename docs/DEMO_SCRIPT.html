@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TrustLayer demo script</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+<style>
+  @page { size: A4; margin: 14mm 13mm 14mm 13mm; }
+  :root { --ink: #101828; --ink2: #475467; --ink3: #98a2b3; --line: #e4e7ec; --soft: #f6f7f9; --accent: #175cd3; --accent-soft: #eff8ff;
+          --danger: #b42318; --danger-soft: #fef3f2; --warn: #b54708; --warn-soft: #fffaeb; --ok: #067647; --ok-soft: #ecfdf3; }
+  * { box-sizing: border-box; }
+  body { font-family: Inter, "Segoe UI", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; margin: 0;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  h1 { font-size: 26pt; line-height: 1.1; letter-spacing: -.03em; margin: 0; font-weight: 800; }
+  h2 { font-size: 15pt; letter-spacing: -.02em; margin: 0 0 4px; font-weight: 750; }
+  h3 { font-size: 11pt; margin: 0 0 6px; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .eyebrow { font-size: 8pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); }
+  .muted { color: var(--ink2); }
+  .small { font-size: 9pt; }
+  .box { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 10px 0; break-inside: avoid; }
+  .box.blue { background: var(--accent-soft); border-color: #b2ddff; }
+  .box.warn { background: var(--warn-soft); border-color: #fedf89; }
+  .box.red { background: var(--danger-soft); border-color: #fecdca; }
+  .box.green { background: var(--ok-soft); border-color: #abefc6; }
+  .cover-top { border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 13pt; }
+  .mark { width: 28px; height: 28px; border-radius: 7px; background: var(--ink); display: inline-block; position: relative; }
+  .mark::after { content: ""; position: absolute; left: 8px; top: 6px; width: 12px; height: 15px; border: 2px solid #fff; border-radius: 3px 3px 7px 7px; }
+  .timeline { display: grid; grid-template-columns: 2.3fr 2.7fr; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 12px 0; }
+  .timeline > div { padding: 10px 14px; }
+  .timeline .a { background: var(--ink); color: #fff; }
+  .timeline .b { background: var(--accent); color: #fff; }
+  .timeline b { font-size: 12pt; display: block; }
+  table.t { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 8px 0; }
+  table.t th { text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+  table.t td { border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+  table.t td.tc { white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
+  ol.check { padding-left: 18px; margin: 6px 0; }
+  ol.check li { margin: 0 0 6px; }
+  .scene { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 10px; break-inside: avoid; overflow: hidden; }
+  .scene-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--soft); border-bottom: 1px solid var(--line); }
+  .tc-pill { background: var(--ink); color: #fff; font-weight: 700; font-size: 9pt; padding: 2px 9px; border-radius: 99px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tc-pill.b { background: var(--accent); }
+  .scene-head .title { font-weight: 750; font-size: 11.5pt; }
+  .scene-head .where { margin-left: auto; font-size: 8.5pt; color: var(--ink2); }
+  .scene-body { display: grid; grid-template-columns: 1fr 1.15fr; }
+  .do { padding: 10px 14px; border-right: 1px solid var(--line); }
+  .say { padding: 10px 14px; background: #fcfcfd; }
+  .lbl { font-size: 7.5pt; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
+  .do .lbl { color: var(--accent); }
+  .say .lbl { color: var(--danger); }
+  .do ol { margin: 0; padding-left: 16px; font-size: 9.3pt; }
+  .do li { margin-bottom: 4px; }
+  .say p { font-size: 11pt; line-height: 1.45; margin: 0 0 6px; }
+  .say .cue { font-size: 8.5pt; color: var(--ink3); font-style: italic; }
+  .say > .cue { display: block; margin: 2px 0 3px; }
+  .k { display: inline-block; border: 1px solid #d0d5dd; background: #fff; border-radius: 5px; padding: 0 5px; font-size: 8.5pt; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 0 #d0d5dd; }
+  .scroll { color: var(--warn); font-weight: 700; }
+  .look { color: var(--ok); font-weight: 700; }
+  .note { font-size: 8.5pt; color: var(--ink2); margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 5px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .big-quote { font-size: 14pt; line-height: 1.45; font-weight: 600; letter-spacing: -.01em; }
+  .footer-note { font-size: 8pt; color: var(--ink3); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1: cover + pitch ============ -->
+<section class="page">
+  <div class="cover-top">
+    <div>
+      <div class="brand"><span class="mark"></span>TrustLayer</div>
+      <h1 style="margin-top:14px">Demo video script</h1>
+      <div class="muted" style="margin-top:6px">PayPal AI Hackathon 2026 · live site: <b>trustlayer-e5mz.onrender.com</b></div>
+    </div>
+    <div style="text-align:right" class="small muted">Full version: <b>about 5:00</b><br />Submission cut: <b>2:58</b> (page 8)</div>
+  </div>
+
+  <div class="eyebrow">The pitch in one sentence</div>
+  <p class="big-quote" style="margin-top:6px">TrustLayer is AI that protects the whole life of a PayPal payment: it reads the conversation before you pay,
+    has PayPal <u>hold</u> the money while it decides, and settles problems before they become disputes.</p>
+
+  <div class="eyebrow" style="margin-top:16px">The pitch in 30 seconds (memorise this)</div>
+  <div class="box">
+    <p>Card fraud tools look at the card. But the things that break trust in PayPal, like purchase scams, disputes, surprise holds and
+      subscription traps, happen in the conversation around a payment, and the money usually moves before anyone checks.</p>
+    <p>Our idea: <b>authorize first, let AI decide with evidence, then move the money.</b> A PayPal authorization holds the buyer's
+      money without charging it, and voiding it costs nothing. That hold gives AI time to look, to ask someone the buyer trusts,
+      or to settle a problem fairly.</p>
+    <p style="margin:0">The AI must quote the exact chat lines behind every warning, and code checks each quote. The AI advises; only code
+      moves money. On 80 held-out chats it paused all 40 scams and wrongly paused 3 honest buyers.</p>
+  </div>
+
+  <div class="eyebrow" style="margin-top:14px">Shape of the video</div>
+  <div class="timeline">
+    <div class="a"><span class="small" style="opacity:.75">0:00 to 2:20 · Overview page</span><b>Part A: the story</b>
+      <span class="small" style="opacity:.85">Problem, today's answers, our idea, one payment's life, results. This is where a reviewer decides to keep watching.</span></div>
+    <div class="b"><span class="small" style="opacity:.8">2:20 to 5:00 · the live site</span><b>Part B: the live demo</b>
+      <span class="small" style="opacity:.9">Scam paused, trusted contact stops it, late parcel settled, seller health, honest subscription, audit log.</span></div>
+  </div>
+
+  <div class="box warn">
+    <b>Important: video length rule.</b> The hackathon asks for a demo video <b>under 3 minutes</b>, and judges are not obliged
+    to watch past that. Recommended: record this full version for yourself, then upload the <b>2:58 submission cut on page 8</b>
+    as the official Devpost video. If you also want the full 5-minute walkthrough online, upload it as a second, unlisted
+    YouTube video and link it in the Devpost description.
+  </div>
+
+  <div class="small muted" style="margin-top:8px"><b>How to read the scene pages:</b> left column <span style="color:var(--accent);font-weight:700">DO</span> is
+    what you click or scroll, in order. Right column <span style="color:var(--danger);font-weight:700">SAY</span> is the narration.
+    <span class="scroll">Orange</span> = scroll, <span class="look">green</span> = point the cursor at it, <span class="k">Button</span> = click it.
+    Grey italic lines in SAY are cues, not words to read.</div>
+</section>
+
+<!-- ============ PAGE 2: before recording ============ -->
+<section class="page">
+  <h2>Before you press record</h2>
+  <p class="muted">About 15 minutes of setup. Doing it in this order means nothing is slow or surprising on camera.</p>
+
+  <div class="two">
+    <div class="box">
+      <h3>1. Wake the site and reset it</h3>
+      <ol class="check">
+        <li>Open <b>trustlayer-e5mz.onrender.com</b>. The free server sleeps; the first load can take about 50 seconds. Wait until the Overview page appears.</li>
+        <li>Click the <span class="k">Audit log</span> tab, then <span class="k">Reset demo</span>, then <span class="k">OK</span>. This clears old orders and starts a fresh audit log.</li>
+      </ol>
+    </div>
+    <div class="box">
+      <h3>2. Start a TrustLayer Plus trial (off camera)</h3>
+      <ol class="check">
+        <li>Click <span class="k">Subscriptions</span>. On the <b>TrustLayer Plus</b> card, click the yellow <span class="k">PayPal Subscribe</span> button.</li>
+        <li>Log in with the <b>sandbox buyer</b> account (<code>SANDBOX_BUYER_EMAIL</code> and password from your <code>.env</code>) and approve.</li>
+        <li>A "TrustLayer Plus · Free trial" card now sits under <b>Your subscriptions</b>. Leave it there for scene B5.</li>
+        <li>Bonus: PayPal now remembers your login, so the checkout popups on camera are fast.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="box">
+      <h3>3. Browser</h3>
+      <ol class="check">
+        <li>Chrome, one window, maximised, zoom <b>100%</b> (<span class="k">Ctrl</span> + <span class="k">0</span>). 110% is fine if text looks small in the recording.</li>
+        <li>Hide the bookmarks bar (<span class="k">Ctrl</span> + <span class="k">Shift</span> + <span class="k">B</span>) and close other tabs.</li>
+        <li>Allow pop-ups for the site (the PayPal window is a popup).</li>
+        <li>Turn on Windows <b>Do not disturb</b> so no notifications appear.</li>
+      </ol>
+    </div>
+    <div class="box">
+      <h3>4. Recorder</h3>
+      <ol class="check">
+        <li>OBS Studio, or Xbox Game Bar (<span class="k">Win</span> + <span class="k">Alt</span> + <span class="k">R</span> starts and stops). 1080p, 30 fps.</li>
+        <li>Do a 10-second mic test and listen back. Quiet room, phone on silent.</li>
+        <li>Finally: click the <span class="k">Overview</span> tab and make sure you are at the very top of the page.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="box blue">
+    <h3>Pace and editing</h3>
+    <p style="margin:0">Speak slowly, about 150 words a minute; the SAY text is sized for that. It is fine to stop talking while PayPal or the AI
+      is loading: cut that dead time afterwards in <b>Clipchamp</b> (built into Windows). If you stumble, pause two seconds and repeat the
+      sentence; trim the mistake later. Keep the cursor still while you talk about something, and move it slowly when pointing.</p>
+  </div>
+</section>
+
+<!-- ============ PART A ============ -->
+<section class="page">
+  <div class="eyebrow">Part A · Overview page · 0:00 to 2:20</div>
+  <h2 style="margin-bottom:10px">The story: make them care in two minutes</h2>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill">0:00 to 0:15</span><span class="title">A1 · Hook</span><span class="where">Overview, top of page</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Start on the <b>Overview</b> tab, top of the page. Keep the mouse still for two seconds.</li>
+        <li>While saying "conversation", move the cursor slowly onto the <span class="look">chat card on the right</span> (the red flagged lines).</li>
+        <li>On "whole life of a payment", <span class="look">point at the red "Payment paused" strip</span> at the bottom of that card.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Hi, I'm Dhruv, and this is TrustLayer.</p>
+        <p>Fraud tools look at the card. But scams, disputes and subscription traps happen in the <b>conversation</b> around a payment.</p>
+        <p>TrustLayer is AI that protects the <b>whole life of a payment</b>, built on PayPal."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill">0:15 to 0:45</span><span class="title">A2 · The problem</span><span class="where">Section "The problem"</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Click <span class="k">Why we built it</span> under the headline. The page <span class="scroll">scrolls by itself</span> to "Trust breaks at four moments".</li>
+        <li>As you name each moment, <span class="look">point at its card</span>, left to right: <b>71%</b>, <b>43.8%</b>, <b>1.5%</b>, <b>Trial traps</b>.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Trust breaks at four moments.</p>
+        <p><b>Before paying:</b> purchase scams are 71% of UK authorised-push-payment fraud, and if you were tricked into paying, it usually isn't refunded.</p>
+        <p><b>When something goes wrong:</b> 43.8% of chargebacks are friendly fraud, and most people say bad service pushed them there.</p>
+        <p><b>Sellers</b> get flagged above a 1.5% dispute rate, often with holds they don't understand. And <b>every month</b>, free trials quietly turn into charges nobody wanted."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill">0:45 to 1:05</span><span class="title">A3 · Today's answers, and where we stand</span><span class="where">Comparison table</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li><span class="scroll">Scroll down</span> one section until the table "Existing tools react after the money has moved" fills the screen.</li>
+        <li>Sweep the cursor down the grey <span class="look">"What exists today"</span> column.</li>
+        <li>Then sweep down the <span class="look">blue "TrustLayer" column</span> on the right.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Today's answers mostly react <b>after</b> the money has moved: generic warnings, a slow and adversarial dispute process, holds explained after the fact.</p>
+        <p>The blue column is where we stand: we act <b>in the moment</b>, with evidence, while the money can still be stopped."</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="eyebrow">Part A · continued</div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill">1:05 to 1:35</span><span class="title">A4 · The idea</span><span class="where">Section "The idea"</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li><span class="scroll">Scroll down</span> to "Authorize first. Let AI decide with evidence. Then move the money."</li>
+        <li>Hold still on the headline while you read it out.</li>
+        <li>On each rule, <span class="look">point at card 1</span>, then <span class="look">card 2</span>, then <span class="look">card 3</span>.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"The idea is simple: <b>authorize first, let AI decide with evidence, then move the money.</b></p>
+        <p>PayPal already has the primitive. An authorization holds the buyer's money without charging it, and voiding it costs nothing.</p>
+        <p>We wrap that hold in three rules. <b>Hold, don't charge.</b> <b>Evidence, not opinions:</b> the AI must quote the exact chat lines, and code checks every quote. And <b>AI advises, but only code moves money.</b>"</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill">1:35 to 2:00</span><span class="title">A5 · One payment, five moments</span><span class="where">Section "The story"</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li><span class="scroll">Scroll down</span> to "One payment, five moments, AI at each one" so all five blue circles are visible.</li>
+        <li>Move the cursor along the circles <span class="look">1 → 2 → 3 → 4 → 5</span>, one per sentence.</li>
+        <li>On the last sentence, <span class="look">point at the blue "Underneath every moment" bar</span>.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Here is one payment's life. <span class="cue">(circle 1)</span> At checkout, Pay-pause reads the chat. <span class="cue">(2)</span> While the money is on hold, there's a cooling-off and a trusted contact. <span class="cue">(3)</span> If something goes wrong, an assistant settles it within the seller's policy. <span class="cue">(4)</span> When the seller gets paid, seller health warns them before a hold. <span class="cue">(5)</span> And every month after, subscriptions stay honest.</p>
+        <p><span class="cue">(bar)</span> Each step is a real PayPal API call, written to a tamper-evident log."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill">2:00 to 2:20</span><span class="title">A6 · Proof, then into the product</span><span class="where">"About this site" → results → footer</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li><span class="scroll">Scroll down</span> to "A working marketplace, not a mock-up". Pause one second on the six numbered steps.</li>
+        <li><span class="scroll">Scroll down</span> to "Measured, not claimed". <span class="look">Point at 40 / 40</span>, then <span class="look">3 / 40</span>.</li>
+        <li><span class="scroll">Scroll to the bottom</span> (dark section) and click <span class="k">Start with the scam listing</span>.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Reviewers can try every step themselves with this guide.</p>
+        <p>And we measured it: on 80 held-out chats, scored once, it paused <b>all 40 scams</b> and wrongly paused <b>3 honest buyers</b>, each one explained in our repo.</p>
+        <p>Let's see it live. This iPhone listing is a scam."</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART B ============ -->
+<section class="page">
+  <div class="eyebrow">Part B · live site · 2:20 to 5:00</div>
+  <h2 style="margin-bottom:10px">The live demo: show, don't tell</h2>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">2:20 to 2:50</span><span class="title">B1 · Pay-pause stops a scam</span><span class="where">iPhone 15 Pro listing</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>On the iPhone page, <span class="look">point at "$420.00 typically $880"</span>, then at the yellow <span class="look">"New seller, no sales yet"</span> badge.</li>
+        <li><span class="scroll">Scroll down slightly</span> so the <b>Conversation</b> is visible. <span class="look">Point at</span> "send $420 on paypal friends and family".</li>
+        <li>Click the blue <span class="k">Continue to payment</span> in the right-hand <b>Checkout</b> card. It shows "Checking payment safety" for about 2 seconds.</li>
+        <li>The pop-up <b>"We paused this payment"</b> opens. <span class="look">Point at</span> the quotes under "From the conversation", then the small grey line near the bottom (model names, "local model p=", "tactic").</li>
+        <li><span class="look">Point at</span> the black <b>Don't send money</b> button. <u>Do not click it.</u></li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"A brand-new seller, half the usual price, and in the chat: Friends and Family, and 'no goods and services'.</p>
+        <p>I press Continue to payment. Before any money moves, three layers check it.</p>
+        <span class="cue">(pop-up opens)</span>
+        <p>Paused. It names the tactic and quotes the exact lines, and every quote was verified against the chat, so the AI can't invent evidence.</p>
+        <p>This line shows the LLM and a model we fine-tuned ourselves, which runs on a CPU and keeps this working even if the LLM is down. The big button is: don't send money."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">2:50 to 3:30</span><span class="title">B2 · Cooling-off and a trusted contact</span><span class="where">Pause pop-up → PayPal → order page</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>In the pop-up, click the grey link <span class="k">I know this seller personally, continue with safeguards</span>.</li>
+        <li>In <b>Trusted contact</b>, type <b>Mom</b>. Click <span class="k">Continue to PayPal</span>.</li>
+        <li>On the right, click the yellow <span class="k">PayPal</span> button. In the PayPal window, click the yellow button at the bottom (<b>Continue</b> or <b>Complete Purchase</b>).</li>
+        <li>You land on the order page: red <b>"Cooling-off in progress"</b> with a <span class="look">countdown (2:00)</span>. Point at it.</li>
+        <li>In that red box click <span class="k">Open their view</span>. A new tab opens: "Can you double-check a payment?"</li>
+        <li>Click the red <span class="k">Stop this payment</span>. <span class="look">Point at</span> "Payment stopped. No money moved."</li>
+      </ol>
+      <div class="note">If the PayPal button doesn't appear, open "PayPal button not loading? Use redirect checkout" under it, approve in the new tab, then click <b>I've approved it</b>.</div></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"But say I insist. I continue with safeguards, and add Mom as a trusted contact.</p>
+        <span class="cue">(PayPal window)</span>
+        <p>PayPal only <b>authorizes</b> the payment. It's a hold, not a charge.</p>
+        <p>A cooling-off timer starts, two minutes here, twenty-four hours in production, because scams rely on urgency. And Mom gets a summary of the warning signs.</p>
+        <span class="cue">(Mom's tab)</span>
+        <p>Mom says stop. The authorization is voided. <b>Zero dollars charged.</b>"</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="eyebrow">Part B · continued</div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">3:30 to 4:05</span><span class="title">B3 · A late parcel, settled before a dispute</span><span class="where">Canon AE-1 listing → order page</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Close Mom's tab (<span class="k">Ctrl</span> + <span class="k">W</span>). Click the <span class="k">Marketplace</span> tab, then the <b>Canon AE-1 Program</b> card.</li>
+        <li>Click <span class="k">Continue to payment</span>. A green <b>"No risk found"</b> card appears. <span class="look">Point at it.</span></li>
+        <li>Click the yellow <span class="k">PayPal</span> button and approve in the PayPal window. The order page shows <b>On hold</b>.</li>
+        <li>In <b>Resolution center</b> (right), click the grey chip <span class="k">It arrived 4 days late and I missed my trip.</span>, then the blue send arrow.</li>
+        <li>Wait about 2 seconds. A green offer appears ("$18.00 back to you"; the amount can vary). Click <span class="k">Accept offer</span>.</li>
+        <li><span class="look">Point at</span> the <b>Payment</b> card: "Released to buyer" and "Captured". Then click <span class="k">Pay out seller</span>.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Now an honest seller. No risk found, so it's a normal PayPal hold.</p>
+        <span class="cue">(after approving)</span>
+        <p>The parcel arrived four days late, and that's how disputes start. The assistant, acting for the seller, offers a partial refund <b>within the seller's policy</b>, and code enforces that limit, so the AI can't promise money it isn't allowed to.</p>
+        <p>I accept. PayPal captures less and releases the rest of the hold. <b>No dispute was ever opened.</b> And the seller is paid through PayPal Payouts."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">4:05 to 4:17</span><span class="title">B4 · Seller health</span><span class="where">Seller health → GadgetHub Outlet</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Click the <span class="k">Seller health</span> tab, then the <b>GadgetHub Outlet</b> row.</li>
+        <li><span class="look">Point at</span> the red dispute rate and the black <b>1.5%</b> line on the gauge, then the bar "Without early resolution".</li>
+        <li>Move to <span class="look">Recommended next steps</span> on the right.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Sellers fear holds that come with no warning. GadgetHub is over the 1.5% line, and would be even higher without early resolution. The AI explains why, in plain English, with next steps."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">4:17 to 4:40</span><span class="title">B5 · Subscriptions without the trap</span><span class="where">Subscriptions tab</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Click the <span class="k">Subscriptions</span> tab. The <b>TrustLayer Plus · Free trial</b> card is at the top (you created it before recording).</li>
+        <li>At the bottom of that card click <span class="k">Simulate +5 days</span>. After a second a yellow reminder appears. <span class="look">Point at</span> its headline and "Our recommendation: cancel".</li>
+        <li>Click <span class="k">Cancel subscription</span>, then the red <span class="k">Cancel now</span>.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Subscriptions without the trap, on PayPal Subscriptions. I move this trial forward five days.</p>
+        <p>Two days before the first charge, the reminder tells me honestly that I haven't used it, and suggests cancelling. The date and amount are written by code, not the AI.</p>
+        <p>Cancelling is one confirmation."</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="eyebrow">Part B · continued</div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">4:40 to 4:50</span><span class="title">B6 · Audit log</span><span class="where">Audit log tab</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Click the <span class="k">Audit log</span> tab. Click <span class="k">Verify chain</span>: a toast says "Recomputed N hashes: chain intact."</li>
+        <li>Click <span class="k">Simulate tampering</span>. The box turns red, "Tampering detected at record #…", and that row is highlighted. <span class="look">Point at the red row.</span></li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Every PayPal call and every AI decision is hash-chained. Verify: intact. Now I edit one record behind the app's back, and the break is found, at the exact record."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-head"><span class="tc-pill b">4:50 to 5:00</span><span class="title">B7 · Close</span><span class="where">Overview tab</span></div>
+    <div class="scene-body">
+      <div class="do"><div class="lbl">Do</div><ol>
+        <li>Click the <span class="k">Overview</span> tab (back to the headline). Keep the mouse still.</li>
+        <li>Stop recording two seconds after you finish speaking.</li>
+      </ol></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"TrustLayer: AI at every moment of a payment, with PayPal holding the money while it thinks. Thanks for watching."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="box green">
+    <h3>Optional extra (+20 s), only if you are under time: the sellers' subscriptions kit</h3>
+    <p class="small" style="margin:0 0 6px"><b>Do:</b> after B5, click <span class="k">Seller health</span> → <b>Maya's Vintage Cameras</b> → in <b>Subscriptions kit</b> click
+      <span class="k">New offering</span>. Name: <b>Film Club Plus</b>. In "What subscribers get" type: <b>Two rolls of film a month. 6-month minimum, call us to cancel.</b>
+      Click <span class="k">Review terms</span>. Red "Not allowed" boxes appear and <b>Publish on PayPal</b> stays disabled.</p>
+    <p class="small" style="margin:0"><b>Say:</b> "Sellers get the same kit. The AI reviews their terms, and code blocks traps like call-to-cancel or minimum terms before anything reaches PayPal."</p>
+  </div>
+
+  <h2 style="margin-top:16px">If something goes wrong on camera</h2>
+  <table class="t">
+    <thead><tr><th style="width:34%">What happens</th><th>What to do or say</th></tr></thead>
+    <tbody>
+      <tr><td>The site is slow on the first load</td><td>You woke it too late. Stop, wait until it loads, start again. Always open it a few minutes before recording.</td></tr>
+      <tr><td>The PayPal window is slow or doesn't open</td><td>Keep talking about the hold; cut the wait in editing. If it never opens, use "PayPal button not loading? Use redirect checkout".</td></tr>
+      <tr><td>The model line says "LLM unavailable: rules + local model"</td><td>Groq is busy and the app fell back. Say: "The hosted AI is busy right now, so our own model and rules took over. That fallback is a feature." Then carry on.</td></tr>
+      <tr><td>The offer amount isn't $18</td><td>Normal: the assistant decides within policy. Read the amount on screen.</td></tr>
+      <tr><td>The resolution assistant asks a question instead of offering</td><td>Type "Yes, a partial refund is fine." and press send.</td></tr>
+      <tr><td>You clicked the wrong thing</td><td>Pause, go back, redo the step. Trim it in editing. Audit log → Reset demo if you need a clean start (then redo the Plus trial).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ SUBMISSION CUT ============ -->
+<section class="page">
+  <div class="eyebrow">For the Devpost upload</div>
+  <h2>Submission cut: 2:58</h2>
+  <p class="muted">Same recording flow, shorter lines. Skip A3 and the payout, and turn B4 to B6 into a quick montage. Read only the lines below.</p>
+  <table class="t">
+    <thead><tr><th style="width:11%">Time</th><th style="width:33%">Do</th><th>Say</th></tr></thead>
+    <tbody>
+      <tr><td class="tc">0:00–0:10</td><td>Overview, top. Point at the chat card.</td><td>"This is TrustLayer: AI that protects the whole life of a PayPal payment, from the chat before you pay to the subscription after."</td></tr>
+      <tr><td class="tc">0:10–0:30</td><td><span class="k">Why we built it</span>. Point at 71% and 43.8%.</td><td>"Purchase scams are 71% of UK push-payment fraud, and if you were tricked, it's rarely refunded. 43.8% of chargebacks are friendly fraud. Trust breaks in the conversation, and money moves before anyone checks."</td></tr>
+      <tr><td class="tc">0:30–0:55</td><td><span class="scroll">Scroll</span> past the table to "The idea". Point at cards 1, 2, 3.</td><td>"Today's tools react after the money moves. Our idea: authorize first, let AI decide with evidence, then move the money. A PayPal authorization holds the money without charging it. The AI must quote its evidence, and only code moves money."</td></tr>
+      <tr><td class="tc">0:55–1:10</td><td><span class="scroll">Scroll</span> to the five circles, sweep 1→5. Scroll to the bottom, click <span class="k">Start with the scam listing</span>.</td><td>"One payment, five moments: checkout, hold, problems, payout, subscriptions. On 80 held-out chats it paused all 40 scams. Let's see it."</td></tr>
+      <tr><td class="tc">1:10–1:38</td><td>B1: <span class="k">Continue to payment</span> → pause pop-up. Point at the quotes.</td><td>"New seller, half price, asking for Friends and Family. Paused before any money moves. It names the tactic and quotes the exact lines, each one verified, and our own fine-tuned model backs it up if the LLM is down."</td></tr>
+      <tr><td class="tc">1:38–2:08</td><td>B2: safeguards → Mom → PayPal approve → <span class="k">Open their view</span> → <span class="k">Stop this payment</span>.</td><td>"If I insist, PayPal only holds the money. A cooling-off starts and Mom gets the warning signs. Mom says stop: the authorization is voided, zero charged."</td></tr>
+      <tr><td class="tc">2:08–2:35</td><td>B3: Canon → approve → late chip → send → <span class="k">Accept offer</span>.</td><td>"An honest seller, a late parcel. The assistant offers a refund within the seller's policy, enforced by code. Accept: PayPal captures less and releases the rest. No dispute."</td></tr>
+      <tr><td class="tc">2:35–2:50</td><td>Montage, about 5 s each: GadgetHub gauge → Plus card after <span class="k">Simulate +5 days</span> → Audit log <span class="k">Simulate tampering</span>.</td><td>"Sellers see dispute risk before a hold. Subscriptions remind you honestly before the first charge. And every PayPal call and AI decision is tamper-evident."</td></tr>
+      <tr><td class="tc">2:50–2:58</td><td><span class="k">Overview</span> tab.</td><td>"TrustLayer: AI at every moment of a payment. Thanks for watching."</td></tr>
+    </tbody>
+  </table>
+  <div class="box blue small">
+    <b>Upload checklist.</b> YouTube → Create → Upload video. Title: <i>TrustLayer: AI that protects the whole life of a PayPal payment</i>.
+    Visibility: <b>Public</b> (the rules need a public video). In the description, paste the live URL and the GitHub link. Copy the YouTube link into
+    the Devpost "Video demo link" field, and submit on Devpost before <b>13 Nov 2026, 01:30 IST</b>.
+  </div>
+  <p class="footer-note">Generated from docs/DEMO_SCRIPT.html in the TrustLayer repository.</p>
+</section>
+
+</body>
+</html>

@@ -1,5 +1,9 @@
 # Demo video script (target 2:50, hard limit 3:00)
 
+> **Current script:** [DEMO_SCRIPT.pdf](DEMO_SCRIPT.pdf) (source: [DEMO_SCRIPT.html](DEMO_SCRIPT.html)). It starts on the
+> new Overview landing page, has click-by-click steps, a full 5-minute version and a 2:58 submission cut. The table
+> below is the earlier version, kept for reference.
+
 Record at 1366x768 or 1440x900, browser zoom 100%. Open the live site once beforehand so the free server is awake.
 Before recording: Audit log → Reset demo. Keep a second tab ready for the trusted-contact link.
 Voice-over only; no music you don't own. Sandbox buyer: the US personal sandbox account.

@@ -20,7 +20,7 @@ for _ in range(40):
         time.sleep(0.5)
 
 orders = json.load(urllib.request.urlopen(BASE + "/api/orders"))
-pages = [("market", "#/", None), ("listing_clear", "#/listing/L1", "check"), ("listing_scam", "#/listing/L2", "check"),
+pages = [("landing", "#/", None), ("market", "#/market", None), ("listing_clear", "#/listing/L1", "check"), ("listing_scam", "#/listing/L2", "check"),
          ("sellers", "#/sellers", None), ("seller_gadgethub", "#/sellers/gadgethub", None),
          ("orders", "#/orders", None), ("subscriptions", "#/subscriptions", None), ("seller_maya_kit", "#/sellers/maya", None), ("ledger", "#/ledger", None)]
 for o in orders[:2]:
@@ -42,7 +42,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f"{OUT}/{name}.png", full_page=True)
         print(f"{name:18s} ok  h1={pg.locator('h1, h2').first.inner_text()[:60]!r}")
     m = b.new_page(viewport={"width": 390, "height": 844})
-    for name, frag in (("mobile_market", "#/"), ("mobile_listing", "#/listing/L1")):
+    for name, frag in (("mobile_landing", "#/"), ("mobile_market", "#/market"), ("mobile_listing", "#/listing/L1")):
         m.goto(f"{BASE}/{frag}")
         m.wait_for_timeout(1300)
         print(f"{name:18s} scrollWidth={m.evaluate('document.documentElement.scrollWidth')} (viewport 390)")
